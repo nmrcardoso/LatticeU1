@@ -20,6 +20,7 @@
 #include "parameters.h"
 #include "index.h"
 #include "tune.h"
+#include "plaquette.h"
 
 
 using namespace std;
@@ -88,22 +89,12 @@ __global__ void kernel_plaquette(double *lat, complexd *plaq){
 }
 
 
-complexd dev_plaquette(double *dev_lat, complexd *dev_plaq, double norm, int threads, int blocks){
-	complexd plaq;
-	cudaSafeCall(cudaMemset(dev_plaq, 0, sizeof(complexd)));
-	kernel_plaquette<<<blocks,threads, threads*sizeof(complexd)>>>(dev_lat, dev_plaq);
-	cudaSafeCall(cudaMemcpy(&plaq, dev_plaq, sizeof(complexd), cudaMemcpyDeviceToHost));
-	plaq *= norm;
-	plaq.real() = 1.-plaq.real();
-	cout << "plaq: " << plaq.real() << '\t' << plaq.imag() << endl;
-	return plaq;
-}
 
 using namespace U1;
 
 class Plaquette1: Tunable{
 private:
-	double* lat;
+	Array<double>* lat;
 	complexd plaq;
 	complexd *dev_plaq;
 	double norm;
@@ -121,10 +112,10 @@ private:
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
 	cudaSafeCall(cudaMemset(dev_plaq, 0, sizeof(complexd)));
-	kernel_plaquette<<<tp.grid, tp.block, tp.shared_bytes, stream>>>(lat, dev_plaq);
+	kernel_plaquette<<<tp.grid, tp.block, tp.shared_bytes, stream>>>(lat->getPtr(), dev_plaq);
 }
 public:
-   Plaquette1(double* lat) : lat(lat) {
+   Plaquette1(Array<double>* lat) : lat(lat) {
 	size = HalfVolume();
 	dev_plaq = (complexd*)dev_malloc(sizeof(complexd));
 	
@@ -187,7 +178,7 @@ public:
 
 
 
-complexd dev_plaquette(double *dev_lat){
+complexd Plaquette(Array<double> *dev_lat){
 	Plaquette1 plaq1(dev_lat);
 	complexd plaq = plaq1.Run();
 	cout << "plaq: " << plaq.real() << '\t' << plaq.imag() << endl;

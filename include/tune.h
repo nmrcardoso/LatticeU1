@@ -27,12 +27,6 @@ using namespace std;
 
 namespace U1{
 
-#define printfU1(abc,...) printf(abc, ##__VA_ARGS__);
-#define errorU1(abc,...) do {  \
-  printf("Error in " __FILE__ ": %d in %s()\n\t",__LINE__, __func__);  \
-  printf(abc, ##__VA_ARGS__); \
-  exit(1); \
-} while (0)
 
 
 

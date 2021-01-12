@@ -22,6 +22,52 @@ extern std::mt19937 *generator;
 
 
 
+cuRNGState* Init_Device_RNG(int seed, size_t size);
+
+
+
+
+
+class CudaRNG{
+	private:
+	cuRNGState *ptr;
+	cuRNGState *ptr_;
+	size_t size;
+	int seed;
+	void Release(){
+		if(ptr) dev_free(ptr);
+		if(ptr_) dev_free(ptr_);
+	}
+	public:
+	CudaRNG(){ ptr = 0; size = 0; ptr_ = 0;}
+	CudaRNG(int seed, size_t size):seed(seed), size(size){
+		ptr = Init_Device_RNG(seed, size);
+		ptr_ = 0;
+	}
+	cuRNGState*  getPtr(){ return ptr; };
+	void Backup(){
+		ptr_ = (cuRNGState*)dev_malloc(size*sizeof(cuRNGState));		
+		cudaSafeCall(cudaMemcpy(ptr_, ptr, size*sizeof(cuRNGState), cudaMemcpyDeviceToDevice));
+	}
+	void Restore(){		
+		cudaSafeCall(cudaMemcpy(ptr, ptr_, size*sizeof(cuRNGState), cudaMemcpyDeviceToDevice));
+		dev_free(ptr_);
+		ptr_ = 0;
+	}
+	~CudaRNG(){ Release(); }
+};
+
+
+
+
+
+
+
+
+
+
+
+
 /**
    @brief Return a random number between a and b
    @param state curand rng state
@@ -74,7 +120,6 @@ inline  __device__ double Random<double>(cuRNGState &state){
 
 
 
-cuRNGState* Init_Device_RNG(int seed);
 
 }
 

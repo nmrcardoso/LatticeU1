@@ -78,15 +78,15 @@ namespace U1 {
     char **strings;
     size = backtrace (array, 10);
     strings = backtrace_symbols (array, size);
-    printfSbreak("Obtained %zd stack frames.\n", size);
-    for (size_t i=0; i<size; i++) printfSbreak("%s\n", strings[i]);
+    printfU1("Obtained %zd stack frames.\n", size);
+    for (size_t i=0; i<size; i++) printfU1("%s\n", strings[i]);
     free(strings);
   }
 
   static void print_alloc_header()
   {
-    printfSbreak("Type        Pointer          Size             Location\n");
-    printfSbreak("----------------------------------------------------------\n");
+    printfU1("Type        Pointer          Size             Location\n");
+    printfU1("----------------------------------------------------------\n");
   }
 
 
@@ -98,7 +98,7 @@ namespace U1 {
     for (entry = alloc[type].begin(); entry != alloc[type].end(); entry++) {
       void *ptr = entry->first;
       MemAlloc a = entry->second;
-      printfSbreak("%s  %15p  %15lu  %s(), %s:%d\n", type_str[type], ptr, (unsigned long) a.base_size,
+      printfU1("%s  %15p  %15lu  %s(), %s:%d\n", type_str[type], ptr, (unsigned long) a.base_size,
 		 a.func.c_str(), a.file.c_str(), a.line);
     }
   }
@@ -163,8 +163,8 @@ namespace U1 {
     int align = posix_memalign(&ptr, page_size, a.base_size);
     if (!ptr || align != 0) {
 #endif
-      printfSbreak("ERROR: Failed to allocate aligned host memory of size %zu (%s:%d in %s())\n", size, a.file.c_str(), a.line, a.func.c_str());
-      errorSbreak("Aborting");
+      printfU1("ERROR: Failed to allocate aligned host memory of size %zu (%s:%d in %s())\n", size, a.file.c_str(), a.line, a.func.c_str());
+      errorU1("Aborting\n");
     }
     return ptr;
   }
@@ -184,16 +184,16 @@ namespace U1 {
 
     cudaError_t err = cudaMalloc(&ptr, size);
     if (err != cudaSuccess) {
-      printfSbreak("ERROR: Failed to allocate device memory of size %zu (%s:%d in %s())\n", size, file, line, func);
-      errorSbreak("Aborting");
+      printfU1("ERROR: Failed to allocate device memory of size %zu (%s:%d in %s())\n", size, file, line, func);
+      errorU1("Aborting\n");
     }
     track_malloc(DEVICE_PTR, a, ptr);
 
 //#ifdef HOST_DEBUG
     err = cudaMemset(ptr, 0, size);
     if (err != cudaSuccess) {
-      printfSbreak("ERROR: Failed to set device memory of size %zu (%s:%d in %s())\n", size, file, line, func);
-      errorSbreak("Aborting");
+      printfU1("ERROR: Failed to set device memory of size %zu (%s:%d in %s())\n", size, file, line, func);
+      errorU1("Aborting\n");
     }
 //#endif
 
@@ -219,15 +219,15 @@ namespace U1 {
 
     CUresult err = cuMemAlloc((CUdeviceptr*)&ptr, size);
     if (err != CUDA_SUCCESS) {
-      printfSbreak("ERROR: Failed to allocate device memory of size %zu (%s:%d in %s())\n", size, file, line, func);
-      errorSbreak("Aborting");
+      printfU1("ERROR: Failed to allocate device memory of size %zu (%s:%d in %s())\n", size, file, line, func);
+      errorU1("Aborting\n");
     }
     track_malloc(DEVICE_PINNED_PTR, a, ptr);
 //#ifdef HOST_DEBUG
     cudaError_t err1 = cudaMemset(ptr, 0, size);
     if (err1 != cudaSuccess) {
-      printfSbreak("ERROR: Failed to set device memory of size %zu (%s:%d in %s())\n", size, file, line, func);
-      errorSbreak("Aborting");
+      printfU1("ERROR: Failed to set device memory of size %zu (%s:%d in %s())\n", size, file, line, func);
+      errorU1("Aborting\n");
     }
 //#endif
     return ptr;
@@ -246,8 +246,8 @@ namespace U1 {
 
     void *ptr = malloc(size);
     if (!ptr) {
-      printfSbreak("ERROR: Failed to allocate host memory of size %zu (%s:%d in %s())\n", size, file, line, func);
-      errorSbreak("Aborting");
+      printfU1("ERROR: Failed to allocate host memory of size %zu (%s:%d in %s())\n", size, file, line, func);
+      errorU1("Aborting\n");
     }
     track_malloc(HOST_PTR, a, ptr);
 //#ifdef HOST_DEBUG
@@ -273,8 +273,8 @@ namespace U1 {
     
     cudaError_t err = cudaHostRegister(ptr, a.base_size, cudaHostRegisterDefault);
     if (err != cudaSuccess) {
-      printfSbreak("ERROR: Failed to register pinned memory of size %zu (%s:%d in %s())\n", size, file, line, func);
-      errorSbreak("Aborting");
+      printfU1("ERROR: Failed to register pinned memory of size %zu (%s:%d in %s())\n", size, file, line, func);
+      errorU1("Aborting\n");
     }
     track_malloc(PINNED_PTR, a, ptr);
     memset(ptr, 0, a.base_size);
@@ -296,15 +296,15 @@ namespace U1 {
     void *ptr;
     cudaError_t err = cudaHostAlloc(&ptr, size, cudaHostRegisterMapped | cudaHostRegisterPortable);
     if (err != cudaSuccess) {
-      printfSbreak("ERROR: cudaHostAlloc failed of size %zu (%s:%d in %s())\n", size, file, line, func);
-      errorSbreak("Aborting");
+      printfU1("ERROR: cudaHostAlloc failed of size %zu (%s:%d in %s())\n", size, file, line, func);
+      errorU1("Aborting\n");
     }
 #else
     void *ptr = aligned_malloc(a, size);
     cudaError_t err = cudaHostRegister(ptr, a.base_size, cudaHostRegisterMapped);
     if (err != cudaSuccess) {
-      printfSbreak("ERROR: Failed to register host-mapped memory of size %zu (%s:%d in %s())\n", size, file, line, func);
-      errorSbreak("Aborting");
+      printfU1("ERROR: Failed to register host-mapped memory of size %zu (%s:%d in %s())\n", size, file, line, func);
+      errorU1("Aborting\n");
     }
 #endif
     track_malloc(MAPPED_PTR, a, ptr);
@@ -321,17 +321,17 @@ namespace U1 {
   void dev_free_(const char *func, const char *file, int line, void *ptr)
   {
     if (!ptr) {
-      printfSbreak("ERROR: Attempt to free NULL device pointer (%s:%d in %s())\n", file, line, func);
-      errorSbreak("Aborting");
+      printfU1("ERROR: Attempt to free NULL device pointer (%s:%d in %s())\n", file, line, func);
+      errorU1("Aborting\n");
     }
     if (!alloc[DEVICE_PTR].count(ptr)) {
-      printfSbreak("ERROR: Attempt to free invalid device pointer (%s:%d in %s())\n", file, line, func);
-      errorSbreak("Aborting");
+      printfU1("ERROR: Attempt to free invalid device pointer (%s:%d in %s())\n", file, line, func);
+      errorU1("Aborting\n");
     }
     cudaError_t err = cudaFree(ptr);
     if (err != cudaSuccess) {
-      printfSbreak("ERROR: Failed to free device memory (%s:%d in %s())\n", file, line, func);
-      errorSbreak("Aborting");
+      printfU1("ERROR: Failed to free device memory (%s:%d in %s())\n", file, line, func);
+      errorU1("Aborting\n");
     }
     track_free(DEVICE_PTR, ptr);
   }
@@ -350,17 +350,17 @@ namespace U1 {
     }*/
 
     if (!ptr) {
-      printfSbreak("ERROR: Attempt to free NULL device pointer (%s:%d in %s())\n", file, line, func);
-      errorSbreak("Aborting");
+      printfU1("ERROR: Attempt to free NULL device pointer (%s:%d in %s())\n", file, line, func);
+      errorU1("Aborting\n");
     }
     if (!alloc[DEVICE_PINNED_PTR].count(ptr)) {
-      printfSbreak("ERROR: Attempt to free invalid device pointer (%s:%d in %s())\n", file, line, func);
-      errorSbreak("Aborting");
+      printfU1("ERROR: Attempt to free invalid device pointer (%s:%d in %s())\n", file, line, func);
+      errorU1("Aborting\n");
     }
     CUresult err = cuMemFree((CUdeviceptr)ptr);
     if (err != CUDA_SUCCESS) {
-      printfSbreak("ERROR: Failed to free device memory (%s:%d in %s())\n", file, line, func);
-      errorSbreak("Aborting");
+      printfU1("ERROR: Failed to free device memory (%s:%d in %s())\n", file, line, func);
+      errorU1("Aborting\n");
     }
     track_free(DEVICE_PINNED_PTR, ptr);
   }
@@ -374,8 +374,8 @@ namespace U1 {
   void host_free_(const char *func, const char *file, int line, void *ptr)
   {
     if (!ptr) {
-      printfSbreak("ERROR: Attempt to free NULL host pointer (%s:%d in %s())\n", file, line, func);
-      errorSbreak("Aborting");
+      printfU1("ERROR: Attempt to free NULL host pointer (%s:%d in %s())\n", file, line, func);
+      errorU1("Aborting\n");
     }
     if (alloc[HOST_PTR].count(ptr)) {
       track_free(HOST_PTR, ptr);
@@ -383,8 +383,8 @@ namespace U1 {
     } else if (alloc[PINNED_PTR].count(ptr)) {
       cudaError_t err = cudaHostUnregister(ptr);
       if (err != cudaSuccess) {
-	printfSbreak("ERROR: Failed to unregister pinned memory (%s:%d in %s())\n", file, line, func);
-	errorSbreak("Aborting");
+	printfU1("ERROR: Failed to unregister pinned memory (%s:%d in %s())\n", file, line, func);
+	errorU1("Aborting\n");
       }
       track_free(PINNED_PTR, ptr);
       free(ptr);
@@ -392,51 +392,51 @@ namespace U1 {
 #ifdef HOST_ALLOC
       cudaError_t err = cudaFreeHost(ptr);
       if (err != cudaSuccess) {
-	printfSbreak("ERROR: Failed to free host memory (%s:%d in %s())\n", file, line, func);
-	errorSbreak("Aborting");
+	printfU1("ERROR: Failed to free host memory (%s:%d in %s())\n", file, line, func);
+	errorU1("Aborting\n");
       }
 #else
       cudaError_t err = cudaHostUnregister(ptr);
       if (err != cudaSuccess) {
-	printfSbreak("ERROR: Failed to unregister host-mapped memory (%s:%d in %s())\n", file, line, func);
-	errorSbreak("Aborting");
+	printfU1("ERROR: Failed to unregister host-mapped memory (%s:%d in %s())\n", file, line, func);
+	errorU1("Aborting\n");
       }
       free(ptr);
 #endif
       track_free(MAPPED_PTR, ptr);
     } else {
-      printfSbreak("ERROR: Attempt to free invalid host pointer (%s:%d in %s())\n", file, line, func);
+      printfU1("ERROR: Attempt to free invalid host pointer (%s:%d in %s())\n", file, line, func);
       print_trace();
-      errorSbreak("Aborting");
+      errorU1("Aborting\n");
     }
   }
 
 
   void printPeakMemUsage()
   {
-  	printfSbreak("----------------------------------------------------------\n");
-    printfSbreak("Device memory used = %.1f MB\n", max_total_bytes[DEVICE_PTR] / (double)(1<<20));
-    printfSbreak("Pinned device memory used = %.1f MB\n", max_total_bytes[DEVICE_PINNED_PTR] / (double)(1<<20));
-    printfSbreak("Page-locked host memory used = %.1f MB\n", max_total_pinned_bytes / (double)(1<<20));
-    printfSbreak("Total host memory used >= %.1f MB\n", max_total_host_bytes / (double)(1<<20));
-  	printfSbreak("----------------------------------------------------------\n");
+  	printfU1("----------------------------------------------------------\n");
+    printfU1("Device memory used = %.1f MB\n", max_total_bytes[DEVICE_PTR] / (double)(1<<20));
+    printfU1("Pinned device memory used = %.1f MB\n", max_total_bytes[DEVICE_PINNED_PTR] / (double)(1<<20));
+    printfU1("Page-locked host memory used = %.1f MB\n", max_total_pinned_bytes / (double)(1<<20));
+    printfU1("Total host memory used >= %.1f MB\n", max_total_host_bytes / (double)(1<<20));
+  	printfU1("----------------------------------------------------------\n");
   }
 
 
   void assertAllMemFree()
   {
     if (!alloc[DEVICE_PTR].empty() || !alloc[DEVICE_PINNED_PTR].empty() || !alloc[HOST_PTR].empty() || !alloc[PINNED_PTR].empty() || !alloc[MAPPED_PTR].empty()) {
-      printfSbreak("The following internal memory allocations were not freed.");
-      printfSbreak("\n");
+      printfU1("The following internal memory allocations were not freed.");
+      printfU1("\n");
       print_alloc_header();
       print_alloc(DEVICE_PTR);
       print_alloc(DEVICE_PINNED_PTR);
       print_alloc(HOST_PTR);
       print_alloc(PINNED_PTR);
       print_alloc(MAPPED_PTR);
-      printfSbreak("\n");
+      printfU1("\n");
     }
-  	else printfSbreak("All Memory Free!\n");
+  	else printfU1("All Memory Free!\n");
   }
 
 
@@ -449,7 +449,7 @@ namespace U1 {
     if (error != CUDA_SUCCESS) {
       const char *string;
       cuGetErrorString(error, &string);
-      errorSbreak("cuPointerGetAttributes failed with error %s", string);
+      errorU1("cuPointerGetAttributes failed with error %s", string);
     }
 
     // catch pointers that have not been created in CUDA
@@ -462,7 +462,7 @@ namespace U1 {
     case CU_MEMORYTYPE_HOST:
       return CPU_FIELD_LOCATION;
     default:
-      errorSbreak("Unknown memory type %d", mem_type);
+      errorU1("Unknown memory type %d", mem_type);
       return INVALID_FIELD_LOCATION;
     }
 
@@ -484,7 +484,7 @@ static void FreeMemoryType(AllocType type){
 	for (entry = alloc[type].begin(),next_entry = entry; entry != alloc[type].end(); entry = next_entry) {
 		void *ptr = entry->first;
 		MemAlloc a = entry->second;
-		printfSbreak("%s  %15p  %15lu  %s(), %s:%d\n", type_str[type], ptr, (unsigned long) a.base_size,
+		printfU1("%s  %15p  %15lu  %s(), %s:%d\n", type_str[type], ptr, (unsigned long) a.base_size,
 		a.func.c_str(), a.file.c_str(), a.line);
 		next_entry++;
 		if(type == DEVICE_PTR) dev_free_(a.func.c_str(), a.file.c_str(), a.line, ptr);
@@ -497,44 +497,44 @@ static void FreeMemoryType(AllocType type){
 
 void FreeAllMemory(){
     if (!alloc[DEVICE_PTR].empty() ) {
-      printfSbreak("Releasing DEVICE internal memory allocations not freed by user:\n");
+      printfU1("Releasing DEVICE internal memory allocations not freed by user:\n");
       print_alloc_header();
       FreeMemoryType(DEVICE_PTR);
-      printfSbreak("\n");
+      printfU1("\n");
     }
     if (!alloc[DEVICE_PINNED_PTR].empty() ) {
-      printfSbreak("Releasing DEVICE_PINNED internal memory allocations not freed by user:\n");
+      printfU1("Releasing DEVICE_PINNED internal memory allocations not freed by user:\n");
       print_alloc_header();
       FreeMemoryType(DEVICE_PINNED_PTR);
-      printfSbreak("\n");
+      printfU1("\n");
     }
     if (!alloc[PINNED_PTR].empty() ) {
-      printfSbreak("Releasing PINNED internal memory allocations not freed by user:\n");
+      printfU1("Releasing PINNED internal memory allocations not freed by user:\n");
       print_alloc_header();
       FreeMemoryType(PINNED_PTR);
-      printfSbreak("\n");
+      printfU1("\n");
     }
     if (!alloc[MAPPED_PTR].empty() ) {
-      printfSbreak("Releasing MAPPED internal memory allocations not freed by user:\n");
+      printfU1("Releasing MAPPED internal memory allocations not freed by user:\n");
       print_alloc_header();
       FreeMemoryType(MAPPED_PTR);
-      printfSbreak("\n");
+      printfU1("\n");
     }
     if (!alloc[HOST_PTR].empty() ) {
-      printfSbreak("Releasing HOST internal memory allocations not freed by user:\n");
+      printfU1("Releasing HOST internal memory allocations not freed by user:\n");
       print_alloc_header();
       FreeMemoryType(HOST_PTR);
-      printfSbreak("\n");
+      printfU1("\n");
     }
     /*if (!alloc[DEVICE_PTR].empty() || !alloc[HOST_PTR].empty() || !alloc[PINNED].empty() || !alloc[MAPPED].empty() ) {
-      printfSbreak("Releasing internal memory allocations not freed by user:\n");
+      printfU1("Releasing internal memory allocations not freed by user:\n");
       print_alloc_header();
       FreeAllDeviceMemory();
       FreeAllHostMemory();
       FreeAllHostMemory(HOST_PTR);
       FreeAllHostMemory(PINNED);
       FreeAllHostMemory(MAPPED);
-      printfSbreak("\n");
+      printfU1("\n");
     }*/
     assertAllMemFree();
   }

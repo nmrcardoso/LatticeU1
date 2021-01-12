@@ -18,6 +18,9 @@
 
 #include "multilevel.h"
 
+
+#include "array.h"
+
 using namespace std;
 using namespace U1;
 
@@ -90,26 +93,20 @@ int main(){
 	SetupGPU_Parameters();
 	            
 
-	//gauge array to store the phases
-	double *dev_lat = (double*)dev_malloc(Volume()*Dirs()*sizeof(double)); //also initialize aray to 0
+	//Array array to store the phases
+	Array<double> *lattice = new Array<double>(Device, Volume()*Dirs()); //also initialize aray to 0
 	//Initialize cuda rng
-	cuRNGState *rng_state = Init_Device_RNG(1234);
+	CudaRNG *rng = new CudaRNG(1234, HalfVolume());
+	//cuRNGState *rng_state = Init_Device_RNG(1234);
 	// cuda memory container for global reductions, used in plaquette and polyakov calculations
 	complexd *dev_tmp = (complexd*)dev_malloc(sizeof(complexd));
-	
-	// kernel number of threads per block and number os blocks
-	int threads = 128;
-	int blocks = (HalfVolume() + threads - 1) / threads;
-	int pblocks = (SpatialVolume()/2 + threads - 1) / threads;
-	
+
 	if(hotstart){
-		HotStart(dev_lat, rng_state);
+		HotStart(lattice, rng);
 	}
 	cout << "Iter: " << PARAMS::iter << " \t";
-	//complexd plaqv = dev_plaquette(dev_lat, dev_tmp, norm, threads, blocks);
-	//complexd ployv = dev_polyakov(dev_lat, dev_tmp, threads, pblocks);
-	complexd plaqv = dev_plaquette(dev_lat);
-	complexd ployv = dev_polyakov(dev_lat);
+	complexd plaqv = Plaquette(lattice);
+	complexd ployv = Polyakov(lattice);
 	
 	
 	string filename = "";
@@ -140,14 +137,14 @@ int main(){
     
 	for(PARAMS::iter = 1; PARAMS::iter <= maxIter; ++PARAMS::iter){
 		// metropolis and overrelaxation algorithm 
-		UpdateLattice(dev_lat, rng_state,  PARAMS::metrop, PARAMS::ovrn);
+		UpdateLattice(lattice, rng,  PARAMS::metrop, PARAMS::ovrn);
 		
 		if( (PARAMS::iter%printiter)==0){
 			cout << "Iter: " << PARAMS::iter << " \t";
-			//plaqv = dev_plaquette(dev_lat, dev_tmp, norm, threads, blocks);
-			//ployv = dev_polyakov(dev_lat, dev_tmp, threads, pblocks);
-			plaqv = dev_plaquette(dev_lat);
-			ployv = dev_polyakov(dev_lat);
+			//plaqv = dev_plaquette(lattice.getPtr(), dev_tmp, norm, threads, blocks);
+			//ployv = dev_polyakov(lattice.getPtr(), dev_tmp, threads, pblocks);
+			plaqv = Plaquette(lattice);
+			ployv = Polyakov(lattice);
 			fileout << PARAMS::iter << '\t' << plaqv.real() << '\t' << plaqv.imag() << endl;
 			fileout1 << PARAMS::iter << '\t' << ployv.real() << '\t' << ployv.imag() << '\t' << ployv.abs() << endl;
 		}
@@ -157,48 +154,44 @@ int main(){
 			/*cout << "############## P(0)*conj(P(r)) version 0 ##################" << endl;
 			p0.start();
 			for(int r=1; r<=Grid(0)/2; ++r){
-				complexd ployv2 = dev_polyakov2(dev_lat, dev_tmp, r, threads, pblocks);
+				complexd ployv2 = dev_polyakov2(lattice.getPtr(), dev_tmp, r, threads, pblocks);
 				cout << r << '\t' << ployv2 << endl;
 			}
 			p0.stop();
 			std::cout << "p0: " << p0.getElapsedTime() << " s" << endl;*/
 			/*cout << "############## P(0)*conj(P(r)) version 1 ##################" << endl;
 			p1.start();
-			poly2(dev_lat);
+			poly2(lattice.getPtr());
 			p1.stop();
 			std::cout << "p1: " << p1.getElapsedTime() << " s" << endl;
 			cout << "########### P(0)*conj(P(r)) Using MultiHit #####################" << endl;
 			p2.start();
-			poly2_mhit(dev_lat);
+			poly2_mhit(lattice.getPtr());
 			p2.stop();
 			std::cout << "p2: " << p2.getElapsedTime() << " s" << endl;		*/	
 			
 			cout << "########### P(0)*conj(P(r)) #####################" << endl;
 			p2.start();
-			complexd* res = Poly2(dev_lat, false);
-			host_free(res);
+			Array<complexd>* res = Poly2(lattice, false);
+			delete res;
 			p2.stop();
 			std::cout << "p2: " << p2.getElapsedTime() << " s" << endl;			
 			
 			cout << "########### P(0)*conj(P(r)) Using MultiHit #####################" << endl;
 			p2.start();
-			res = Poly2(dev_lat, true);
-			host_free(res);
+			res = Poly2(lattice, true);
+			delete res;
 			p2.stop();
-			std::cout << "p2: " << p2.getElapsedTime() << " s" << endl;			
-			
-			
-			
-			
+			std::cout << "p2: " << p2.getElapsedTime() << " s" << endl;					
 			
 			
 			cout << "########### P(0)*conj(P(r)) Using MultiLevel #####################" << endl;
 			p3.start();
-			//MultiLevel(dev_lat, rng_state, 50, 10, 50, 10, 2, 5);
-			//MultiLevel(dev_lat, rng_state, 1, 1, 1, 1, 1, 3);
-			//res = MultiLevel(dev_lat, rng_state, 1, 0, 1, 0, 1, 3);
-			res = MultiLevel(dev_lat, rng_state, 10, 16, 25, 5, 2, 5);
-			host_free(res);
+			//MultiLevel(lattice.getPtr(), rng.getPtr(), 50, 10, 50, 10, 2, 5);
+			//MultiLevel(lattice.getPtr(), rng.getPtr(), 1, 1, 1, 1, 1, 3);
+			//res = MultiLevel(lattice.getPtr(), rng.getPtr(), 1, 0, 1, 0, 1, 3);
+			Array<complexd>* results = MultiLevel(lattice, rng, 10, 16, 25, 5, 2, 5);
+			delete results;
 			p3.stop();
 			std::cout << "p3: " << p3.getElapsedTime() << " s" << endl;
 			cout << "################################" << endl;
@@ -210,9 +203,9 @@ int main(){
 	fileout1.close();
 	
 	
-	dev_free(dev_lat);
 	dev_free(dev_tmp);
-	dev_free(rng_state);
+	delete lattice;
+	delete rng;
 	t0.stop();
 	std::cout << "Time: " << t0.getElapsedTime() << " s" << endl;
 	

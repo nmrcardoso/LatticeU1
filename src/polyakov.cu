@@ -94,9 +94,9 @@ complexd dev_polyakov(double *dev_lat, complexd *dev_poly, int threads, int bloc
 
 using namespace U1;
 
-class Polyakov: Tunable{
+class CalcPolyakov: Tunable{
 private:
-	double* lat;
+	Array<double>* lat;
 	complexd poly;
 	complexd *dev_poly;
 	double norm;
@@ -114,16 +114,16 @@ private:
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
 	cudaSafeCall(cudaMemset(dev_poly, 0, sizeof(complexd)));
-	kernel_polyakov<<<tp.grid, tp.block, tp.shared_bytes, stream>>>(lat, dev_poly);
+	kernel_polyakov<<<tp.grid, tp.block, tp.shared_bytes, stream>>>(lat->getPtr(), dev_poly);
 }
 public:
-   Polyakov(double* lat) : lat(lat) {
+   CalcPolyakov(Array<double>* lat) : lat(lat) {
 	size = SpatialVolume()/2;
 	dev_poly = (complexd*)dev_malloc(sizeof(complexd));
 	norm = 1. / double(SpatialVolume());
 	timesec = 0.0;  
 }
-   ~Polyakov(){ dev_free(dev_poly);};
+   ~CalcPolyakov(){ dev_free(dev_poly);};
    complexd Run(const cudaStream_t &stream){
 #ifdef TIMMINGS
     time.start();
@@ -169,118 +169,12 @@ public:
 
 
 
-complexd dev_polyakov(double *dev_lat){
-	complexd poly;
-	Polyakov pl(dev_lat);
-	poly = pl.Run();
+complexd Polyakov(Array<double> *dev_lat){
+	CalcPolyakov pl(dev_lat);
+	complexd poly = pl.Run();
 	cout << "\t\t" << "L: " << poly.real() << '\t' << poly.imag() << "\t|L|: " << poly.abs() << endl;
 	return poly;
 } 
-
-
-
-
-
-
-
-
-
-
-__global__ void kernel_polyakov2(double *lat, complexd *poly, int radius){
-    size_t id = threadIdx.x + blockDim.x * blockIdx.x;
-    
-	complexd poly0 = 0.;
-	
-	if( id < SpatialVolume()/2 ){
-		for(int parity = 0; parity < 2; ++parity){		
-			int x[4];
-			indexEO(id, parity, x);
-			
-			double tmp = 0.;
-			for(x[TDir()] = 0; x[TDir()] < Grid(TDir()); ++x[TDir()])
-				tmp += lat[ indexId(x, TDir()) ];
-				
-			for(int dir = 0; dir < TDir(); dir++){
-				int xx[4];
-				indexEO(id, parity, xx);
-				xx[dir] = (xx[dir] + radius) % Grid(dir);
-			
-				double tmp1 = 0.;
-				for(xx[TDir()] = 0; xx[TDir()] < Grid(TDir()); ++xx[TDir()])
-					tmp1 += lat[ indexId(xx, TDir()) ];
-					
-					
-					
-					
-				poly0.real() += cos(tmp-tmp1);
-				poly0.imag() += sin(tmp-tmp1);
-				
-			}
-		}
-	}
-	reduce_block_1d<complexd>(poly, poly0);
-}
-
-
-
-__global__ void kernel_polyakov21(double *lat, complexd *poly, int radius){
-    size_t id = threadIdx.x + blockDim.x * blockIdx.x;
-    
-	complexd poly0 = 0.;
-	
-	if( id < SpatialVolume()/2 ){
-		for(int parity = 0; parity < 2; ++parity){		
-			int x[4];
-			indexEO(id, parity, x);
-			
-			complexd tmp = 1.;
-			for(x[TDir()] = 0; x[TDir()] < Grid(TDir()); ++x[TDir()])
-				tmp *= exp_ir(lat[ indexId(x, TDir()) ]);
-				
-			for(int dir = 0; dir < TDir(); dir++){
-				int xx[4];
-				indexEO(id, parity, xx);
-				xx[dir] = (xx[dir] + radius) % Grid(dir);
-			
-				complexd tmp1 = 1.;
-				for(xx[TDir()] = 0; xx[TDir()] < Grid(TDir()); ++xx[TDir()])
-					tmp1 *= exp_ir(lat[ indexId(xx, TDir()) ]);
-					
-					
-				poly0 += tmp * conj(tmp1);
-					
-				
-			}
-		}
-	}
-	reduce_block_1d<complexd>(poly, poly0);
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-complexd dev_polyakov2(double *dev_lat, complexd *dev_poly, int radius, int threads, int blocks){
-	complexd poly;
-	cudaSafeCall(cudaMemset(dev_poly, 0, sizeof(complexd)));
-	kernel_polyakov2<<<blocks, threads, threads*sizeof(complexd)>>>(dev_lat, dev_poly, radius);
-	cudaSafeCall(cudaMemcpy(&poly, dev_poly, sizeof(complexd), cudaMemcpyDeviceToHost));
-	poly /= double(SpatialVolume()*(Dirs()-1));
-	//cout << "\t\t" << "L: " << poly.real() << '\t' << poly.imag() << "\t|L|: " << poly.abs() << endl;
-	return poly;
-} 
-
-
-
 
 
 
@@ -585,8 +479,8 @@ __global__ void kernel_polyakov_volume(double *lat, complexd *poly){
 template< bool multihit>
 class Polyakov_Vol: Tunable{
 private:
-	double* lat;
-	complexd* poly;
+	Array<double>* lat;
+	Array<complexd>* poly;
 	int size;
 	double timesec;
 #ifdef TIMMINGS
@@ -600,16 +494,16 @@ private:
    unsigned int minThreads() const { return size; }
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-	kernel_polyakov_volume<multihit><<<tp.grid, tp.block, tp.shared_bytes, stream>>>(lat, poly);
+	kernel_polyakov_volume<multihit><<<tp.grid, tp.block, tp.shared_bytes, stream>>>(lat->getPtr(), poly->getPtr());
 }
 public:
-   Polyakov_Vol(double* lat) : lat(lat) {
+   Polyakov_Vol(Array<double>* lat) : lat(lat) {
 	size = SpatialVolume();
-	poly = (complexd*)dev_malloc(SpatialVolume()*sizeof(complexd));
+	poly = new Array<complexd>(Device, SpatialVolume() );
 	timesec = 0.0;  
 }
    ~Polyakov_Vol(){ };
-   complexd* Run(const cudaStream_t &stream){
+   Array<complexd>* Run(const cudaStream_t &stream){
 #ifdef TIMMINGS
     time.start();
 #endif
@@ -623,7 +517,7 @@ public:
 #endif
 	return poly;
 }
-   complexd* Run(){	return Run(0);}
+   Array<complexd>* Run(){	return Run(0);}
    double flops(){	return ((double)flop() * 1.0e-9) / timesec;}
    double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
    long long flop() const { return 0;}
@@ -682,9 +576,9 @@ __global__ void kernel_PP(complexd *poly, complexd *res, int radius){
 
 class PP: Tunable{
 private:
-	complexd* pvol;
-	complexd *poly;
-	complexd *dev_poly;
+	Array<complexd> *pvol;
+	Array<complexd> *poly;
+	Array<complexd> *dev_poly;
 	int radius;
 	double norm;
 	int size;
@@ -700,25 +594,25 @@ private:
    unsigned int minThreads() const { return size; }
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-	cudaSafeCall(cudaMemset(dev_poly, 0, radius*sizeof(complexd)));
-	kernel_PP<<<tp.grid, tp.block, tp.shared_bytes, stream>>>(pvol, dev_poly, radius);
+	dev_poly->Clear();
+	kernel_PP<<<tp.grid, tp.block, tp.shared_bytes, stream>>>(pvol->getPtr(), dev_poly->getPtr(), radius);
 }
 public:
-   PP(complexd *pvol, int radius) : pvol(pvol), radius(radius) {
+   PP(Array<complexd> *pvol, int radius) : pvol(pvol), radius(radius) {
 	size = SpatialVolume();
-	dev_poly = (complexd*)dev_malloc(radius*sizeof(complexd));
-	poly = (complexd*)safe_malloc(radius*sizeof(complexd));
+	dev_poly = new Array<complexd>(Device, radius);
+	poly = new Array<complexd>(Host, radius);
 	norm = 1. / double(SpatialVolume()*(Dirs()-1));
 	timesec = 0.0;  
 }
-   ~PP(){ dev_free(dev_poly);};
-   complexd* Run(const cudaStream_t &stream){
+   ~PP(){ delete dev_poly;};
+   Array<complexd>* Run(const cudaStream_t &stream){
 #ifdef TIMMINGS
     time.start();
 #endif
 	apply(stream);
-	cudaSafeCall(cudaMemcpy(poly, dev_poly, radius*sizeof(complexd), cudaMemcpyDeviceToHost));
-	for(int i = 0; i < radius; ++i) poly[i] *= norm;
+	poly->Copy(dev_poly);
+	for(int i = 0; i < radius; ++i) poly->getPtr()[i] *= norm;
     CUDA_SAFE_DEVICE_SYNC();
     CUT_CHECK_ERROR("Kernel execution failed");
 #ifdef TIMMINGS
@@ -728,7 +622,7 @@ public:
 #endif
 	return poly;
 }
-   complexd* Run(){	return Run(0);}
+   Array<complexd>* Run(){	return Run(0);}
    double flops(){	return ((double)flop() * 1.0e-9) / timesec;}
    double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
    long long flop() const { return 0;}
@@ -758,10 +652,10 @@ public:
 
 
 
-complexd* Poly2(double *lat, bool multihit){
+Array<complexd>* Poly2(Array<double> *lat, bool multihit){
 	int radius = Grid(0)/2;
 	
-	complexd* poly;
+	Array<complexd>* poly = 0;
 	if(multihit){
 		Polyakov_Vol<true> pvol(lat);
 		poly = pvol.Run();
@@ -771,8 +665,8 @@ complexd* Poly2(double *lat, bool multihit){
 		poly = pvol.Run();
 	}
 	PP pp(poly, radius);
-	complexd* poly2 = pp.Run();
-	dev_free(poly);
+	Array<complexd>* poly2 = pp.Run();
+	if(poly) delete poly;
 	
 	std::ofstream fileout;
 	std::string filename = "Pot_" + GetLatticeName() + ".dat";
@@ -785,8 +679,8 @@ complexd* Poly2(double *lat, bool multihit){
 	fileout.precision(12);
 		
 	for(int r = 0; r < radius; ++r){
-		cout << r+1 << '\t' << poly2[r].real() << '\t' << poly2[r].imag() << endl;
-		fileout << r+1 << '\t' << poly2[r].real() << '\t' << poly2[r].imag() << endl;
+		cout << r+1 << '\t' << poly2->getPtr()[r].real() << '\t' << poly2->getPtr()[r].imag() << endl;
+		fileout << r+1 << '\t' << poly2->getPtr()[r].real() << '\t' << poly2->getPtr()[r].imag() << endl;
 	}
 	
 	fileout.close();	

@@ -2,15 +2,14 @@
 #define __PLAQUETTE__
 
 #include "complex.h"
+#include "array.h"
 
 
 namespace U1{
 
 void plaquette(double *lat, double *plaq);
 
-complexd dev_plaquette(double *dev_lat);
-
-complexd dev_plaquette(double *dev_lat, complexd *dev_plaq, double norm, int threads, int blocks);
+complexd Plaquette(Array<double> *dev_lat);
 
 }
 

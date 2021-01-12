@@ -23,6 +23,8 @@
 
 #include "tune.h"
 
+#include "array.h"
+
 using namespace std;
 
 namespace U1{
@@ -62,10 +64,8 @@ __global__ void kernel_metropolis_multilevel(double *lat, int parity, int mu, cu
 template<int multilevel>
 class Metropolis_ML: Tunable{
 private:
-	double* lat;
-	double* tmp;
-	cuRNGState *rng_state;
-	cuRNGState *state;
+	Array<double>* lat;
+	CudaRNG *rng_state;
 	int metrop;
 	int parity;
 	int mu;
@@ -82,10 +82,10 @@ private:
    unsigned int minThreads() const { return size; }
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-	kernel_metropolis_multilevel<multilevel><<<tp.grid, tp.block, 0, stream>>>(lat, parity, mu, rng_state);
+	kernel_metropolis_multilevel<multilevel><<<tp.grid, tp.block, 0, stream>>>(lat->getPtr(), parity, mu, rng_state->getPtr());
 }
 public:
-   Metropolis_ML(double* lat, cuRNGState *rng_state, int metrop) : lat(lat), rng_state(rng_state), metrop(metrop){
+   Metropolis_ML(Array<double>* lat, CudaRNG *rng_state, int metrop) : lat(lat), rng_state(rng_state), metrop(metrop){
 	size = HalfVolume();
 	timesec = 0.0;  
 }
@@ -129,17 +129,12 @@ public:
     return ps.str();
   }
   void preTune() {
-	tmp = (double*)dev_malloc(Volume()*Dirs()*sizeof(double));
-	cudaSafeCall(cudaMemcpy(tmp, lat, Volume()*Dirs()*sizeof(double), cudaMemcpyDeviceToDevice));
-	
-	state = (cuRNGState*)dev_malloc(HalfVolume()*sizeof(cuRNGState));	
-	cudaSafeCall(cudaMemcpy(state, rng_state, HalfVolume()*sizeof(cuRNGState), cudaMemcpyDeviceToDevice));	
+	lat->Backup();
+	rng_state->Backup();
   }
   void postTune() {  
-	cudaSafeCall(cudaMemcpy(lat, tmp, Volume()*Dirs()*sizeof(double), cudaMemcpyDeviceToDevice));
-	cudaSafeCall(cudaMemcpy(rng_state, state, HalfVolume()*sizeof(cuRNGState), cudaMemcpyDeviceToDevice));
-	dev_free(tmp);
-	dev_free(state);
+  	lat->Restore();
+  	rng_state->Restore();
  }
 
 };
@@ -167,8 +162,7 @@ __global__ void kernel_overrelaxation_multilevel(double *lat, int parity, int mu
 template<int multilevel>
 class OverRelaxation_ML: Tunable{
 private:
-	double* lat;
-	double* tmp;
+	Array<double>* lat;
 	int ovrn;
 	int parity;
 	int mu;
@@ -185,10 +179,10 @@ private:
    unsigned int minThreads() const { return size; }
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-	kernel_overrelaxation_multilevel<multilevel><<<tp.grid, tp.block, 0, stream>>>(lat, parity, mu);
+	kernel_overrelaxation_multilevel<multilevel><<<tp.grid, tp.block, 0, stream>>>(lat->getPtr(), parity, mu);
 }
 public:
-   OverRelaxation_ML(double* lat, int ovrn) : lat(lat), ovrn(ovrn){
+   OverRelaxation_ML(Array<double>* lat, int ovrn) : lat(lat), ovrn(ovrn){
 	size = HalfVolume();
 	timesec = 0.0;  
 }
@@ -234,12 +228,10 @@ public:
     return ps.str();
   }
   void preTune() {
-	tmp = (double*)dev_malloc(Volume()*Dirs()*sizeof(double));
-	cudaSafeCall(cudaMemcpy(tmp, lat, Volume()*Dirs()*sizeof(double), cudaMemcpyDeviceToDevice));		
+  	lat->Backup();		
   }
   void postTune() {  
-	cudaSafeCall(cudaMemcpy(lat, tmp, Volume()*Dirs()*sizeof(double), cudaMemcpyDeviceToDevice));
-	dev_free(tmp);
+	lat->Restore();
  }
 
 };
@@ -291,8 +283,8 @@ __global__ void kernel_l2_multilevel_0(double *lat, complexd *poly){
 template< bool multihit>
 class Polyakov_Volume: Tunable{
 private:
-	double* lat;
-	complexd* poly;
+	Array<double>* lat;
+	Array<complexd>* poly;
 	int size;
 	double timesec;
 #ifdef TIMMINGS
@@ -306,16 +298,16 @@ private:
    unsigned int minThreads() const { return size; }
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-	kernel_l2_multilevel_0<multihit><<<tp.grid, tp.block, 0, stream>>>(lat, poly);
+	kernel_l2_multilevel_0<multihit><<<tp.grid, tp.block, 0, stream>>>(lat->getPtr(), poly->getPtr());
 }
 public:
-   Polyakov_Volume(double* lat) : lat(lat) {
+   Polyakov_Volume(Array<double>* lat) : lat(lat) {
 	size = Volume();
-	poly = (complexd*)dev_malloc(Volume()*sizeof(complexd));
+	poly = new Array<complexd>(Device, Volume());
 	timesec = 0.0;  
 }
    ~Polyakov_Volume(){ };
-   complexd* Run(const cudaStream_t &stream){
+   Array<complexd>* Run(const cudaStream_t &stream){
 #ifdef TIMMINGS
     time.start();
 #endif
@@ -329,7 +321,7 @@ public:
 #endif
 	return poly;
 }
-   complexd* Run(){	return Run(0);}
+   Array<complexd>* Run(){	return Run(0);}
    double flops(){	return ((double)flop() * 1.0e-9) / timesec;}
    double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
    long long flop() const { return 0;}
@@ -393,9 +385,8 @@ __global__ void kernel_l2_multilevel_1(complexd *poly, complexd *l2, int radius)
 
 class L2ML: Tunable{
 private:
-	complexd* poly;
-	complexd *l2;
-	complexd *temp_l2;
+	Array<complexd>* poly;
+	Array<complexd> *l2;
 	size_t sl2;
 	int radius;
 	int size;
@@ -411,10 +402,10 @@ private:
    unsigned int minThreads() const { return size; }
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-	kernel_l2_multilevel_1<<<tp.grid, tp.block, tp.shared_bytes, stream>>>(poly, l2, radius);
+	kernel_l2_multilevel_1<<<tp.grid, tp.block, tp.shared_bytes, stream>>>(poly->getPtr(), l2->getPtr(), radius);
 }
 public:	
-   L2ML(complexd *poly, complexd *l2, size_t sl2, int radius) : poly(poly), l2(l2), sl2(sl2), radius(radius) {
+   L2ML(Array<complexd> *poly, Array<complexd> *l2, size_t sl2, int radius) : poly(poly), l2(l2), sl2(sl2), radius(radius) {
 	size = SpatialVolume();
 	timesec = 0.0;  
 }
@@ -455,12 +446,10 @@ public:
     return ps.str();
   }
   void preTune() {
-	temp_l2 = (complexd*)dev_malloc(sl2*sizeof(complexd));	
-	cudaSafeCall(cudaMemcpy(temp_l2, l2, sl2*sizeof(complexd), cudaMemcpyDeviceToDevice));	
+  	l2->Backup();	
   }
   void postTune() {  
-	cudaSafeCall(cudaMemcpy(l2, temp_l2, sl2*sizeof(complexd), cudaMemcpyDeviceToDevice));
-	dev_free(temp_l2);
+	l2->Restore();
  }
 
 };
@@ -492,9 +481,8 @@ __global__ void kernel_l2avg_l4_multilevel(complexd *dev_l2, complexd *dev_l4, i
 
 class L2AvgL4ML: Tunable{
 private:
-	complexd *l4;
-	complexd *l2;
-	complexd *temp_l4;
+	Array<complexd> *l4;
+	Array<complexd> *l2;
 	double l2norm;
 	size_t sl4;
 	int radius;
@@ -511,10 +499,10 @@ private:
    unsigned int minThreads() const { return size; }
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-	kernel_l2avg_l4_multilevel<<<tp.grid, tp.block, 0, stream>>>(l2, l4, radius, l2norm);
+	kernel_l2avg_l4_multilevel<<<tp.grid, tp.block, 0, stream>>>(l2->getPtr(), l4->getPtr(), radius, l2norm);
 }
 public:	
-   L2AvgL4ML(complexd *l2, complexd *l4, size_t sl4, int radius, double l2norm) : l2(l2), l4(l4), sl4(sl4), radius(radius), l2norm(l2norm) {
+   L2AvgL4ML(Array<complexd> *l2, Array<complexd> *l4, size_t sl4, int radius, double l2norm) : l2(l2), l4(l4), sl4(sl4), radius(radius), l2norm(l2norm) {
 	size = SpatialVolume() * radius * (Dirs()-1);
 	timesec = 0.0;  
 }
@@ -555,12 +543,10 @@ public:
     return ps.str();
   }
   void preTune() {
-	temp_l4 = (complexd*)dev_malloc(sl4*sizeof(complexd));	
-	cudaSafeCall(cudaMemcpy(temp_l4, l4, sl4*sizeof(complexd), cudaMemcpyDeviceToDevice));	
+  	l4->Backup();
   }
   void postTune() {  
-	cudaSafeCall(cudaMemcpy(l4, temp_l4, sl4*sizeof(complexd), cudaMemcpyDeviceToDevice));
-	dev_free(temp_l4);
+  	l4->Restore();
  }
 
 };
@@ -590,9 +576,9 @@ __global__ void kernel_l4avg_Final_multilevel(complexd *dev_l4, complexd *res, i
 
 class L4AvgPP: Tunable{
 private:
-	complexd* l4;
-	complexd *poly;
-	complexd *dev_poly;
+	Array<complexd> *l4;
+	Array<complexd> *dev_poly;
+	Array<complexd> *poly;
 	int radius;
 	double norm;
 	double l4norm;
@@ -609,25 +595,25 @@ private:
    unsigned int minThreads() const { return size; }
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-	cudaSafeCall(cudaMemset(dev_poly, 0, radius*sizeof(complexd)));
-	kernel_l4avg_Final_multilevel<<<tp.grid, tp.block, tp.shared_bytes, stream>>>(l4, dev_poly, radius, l4norm);
+	dev_poly->Clear();
+	kernel_l4avg_Final_multilevel<<<tp.grid, tp.block, tp.shared_bytes, stream>>>(l4->getPtr(), dev_poly->getPtr(), radius, l4norm);
 }
 public:
-   L4AvgPP(complexd *l4, int radius, double l4norm) : l4(l4), radius(radius), l4norm(l4norm) {
+   L4AvgPP(Array<complexd> *l4, int radius, double l4norm) : l4(l4), radius(radius), l4norm(l4norm) {
 	size = SpatialVolume();
-	dev_poly = (complexd*)dev_malloc(radius*sizeof(complexd));
-	poly = (complexd*)safe_malloc(radius*sizeof(complexd));
+	dev_poly = new Array<complexd>(Device, radius);
+	poly = new Array<complexd>(Host, radius);
 	norm = 1. / double(SpatialVolume()*(Dirs()-1));
 	timesec = 0.0;  
 }
-   ~L4AvgPP(){ dev_free(dev_poly);};
-   complexd* Run(const cudaStream_t &stream){
+   ~L4AvgPP(){ delete dev_poly; };
+   Array<complexd>* Run(const cudaStream_t &stream){
 #ifdef TIMMINGS
     time.start();
 #endif
 	apply(stream);
-	cudaSafeCall(cudaMemcpy(poly, dev_poly, radius*sizeof(complexd), cudaMemcpyDeviceToHost));
-	for(int i = 0; i < radius; ++i) poly[i] *= norm;
+	poly->Copy(dev_poly);
+	for(int i = 0; i < radius; ++i) poly->getPtr()[i] *= norm;
     CUDA_SAFE_DEVICE_SYNC();
     CUT_CHECK_ERROR("Kernel execution failed");
 #ifdef TIMMINGS
@@ -637,7 +623,7 @@ public:
 #endif
 	return poly;
 }
-   complexd* Run(){	return Run(0);}
+   Array<complexd>* Run(){	return Run(0);}
    double flops(){	return ((double)flop() * 1.0e-9) / timesec;}
    double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
    long long flop() const { return 0;}
@@ -667,22 +653,24 @@ public:
 
 
 
-complexd* MultiLevel(double *lat, cuRNGState *rng_state, int n4, int k4, int n2, int k2, int metrop, int ovrn){
+Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int k4, int n2, int k2, int metrop, int ovrn){
 
 	if( Grid(TDir())%4 != 0 ) {
 		cout << "Error: Cannot Apply MultiLevel Algorithm...\n Nt is not multiple of 4...\n Exiting..." << endl;
 		exit(1);
 	}
-	double *dev_lat = (double*)dev_malloc(Volume()*Dirs()*sizeof(double));
-	cudaSafeCall(cudaMemcpy(dev_lat, lat, Volume()*Dirs()*sizeof(double), cudaMemcpyDeviceToDevice));
+	Array<double>* dev_lat = new Array<double>(Device);
+	dev_lat->Copy(lat);
 
 	int radius = Grid(0)/2;
 	int nl2 = Grid(TDir())/2;
 	int sl2 = nl2*(Dirs()-1)*radius*SpatialVolume();
-	complexd *l2 = (complexd*)dev_malloc(sl2*sizeof(complexd));
+	//complexd *l2 = (complexd*)dev_malloc(sl2*sizeof(complexd));
+	Array<complexd> *l2 = new Array<complexd>(Device, sl2);
 	int nl4 = Grid(TDir())/4;
 	size_t sl4 = nl4*(Dirs()-1)*radius*SpatialVolume();
-	complexd *l4 = (complexd*)dev_malloc(sl4*sizeof(complexd));
+	Array<complexd> *l4 = new Array<complexd>(Device, sl4);
+	//complexd *l4 = (complexd*)dev_malloc(sl4*sizeof(complexd));
 	
 	
 	
@@ -696,14 +684,14 @@ complexd* MultiLevel(double *lat, cuRNGState *rng_state, int n4, int k4, int n2,
 	
 	const bool multihit = true;
 	Polyakov_Volume<multihit> mhitVol(dev_lat);
-	complexd* dev_mhit;
+	Array<complexd>* dev_mhit;
 	
 	double l2norm = 1./double(n2);
 	L2AvgL4ML l2avgl4(l2, l4, sl4, radius, l2norm);
 	double l4norm = 1./double(n4);
 	L4AvgPP l4avgpp(l4, radius, l4norm);
 
-	cudaSafeCall(cudaMemset(l4, 0, sl4*sizeof(complexd)));
+	l4->Clear();
 	for(int i = 0; i < n4; ++i){
 		cout << "Iter of l4: " << i << endl;
 		//Update the lattice k4 times freezing spacial links in layers with t multiple of 4
@@ -711,7 +699,7 @@ complexd* MultiLevel(double *lat, cuRNGState *rng_state, int n4, int k4, int n2,
 			mtp4.Run();
 			ovr4.Run();
 		}
-		cudaSafeCall(cudaMemset(l2, 0, sl2*sizeof(complexd)));
+		l2->Clear();
 		for(int k = 0; k < n2; ++k){		
 			//Update the lattice k2 times freezing spacial links in layers with t multiple of 2
 			for(int l = 0; l < k2; ++l){
@@ -725,29 +713,21 @@ complexd* MultiLevel(double *lat, cuRNGState *rng_state, int n4, int k4, int n2,
 			l2ml.Run();
 		}
 		//Average tensor T2 and Calculate tensor T4
-		l2avgl4.Run();
+		l2avgl4.Run();	
 		
 		
-		
-		
-		
-		/*double l4norm1 = 1./double(i+1);
-		L4AvgPP l4avgpp1(l4, radius, l4norm1);
-		complexd* res = l4avgpp1.Run();		
-		for(int r = 0; r < radius; ++r){
-			cout << i << '\t' << r+1 << '\t' << res[r].real() << '\t' << res[r].imag() << endl;
+		if(0){
+			double l4norm1 = 1./double(i+1);
+			L4AvgPP l4avgpp1(l4, radius, l4norm1);
+			Array<complexd>* res = l4avgpp1.Run();
+			cout << res << endl;
+			delete res;
 		}
-		cout << "################################" << endl;		
-		host_free(res);*/
-		
-	
 	}
-	dev_free(dev_lat);
-	dev_free(dev_mhit);
-	dev_free(l2);
+	delete dev_lat, dev_mhit, l2;
 	//Average tensor T4 and Calculate P(0)*conj(P(r))	
-	complexd* res = l4avgpp.Run();
-	dev_free(l4);
+	Array<complexd>* res = l4avgpp.Run();
+	delete l4;
 
 	std::ofstream fileout;
 	std::string filename = "Pot_mlevel_" + GetLatticeName() + ".dat";
@@ -757,15 +737,14 @@ complexd* MultiLevel(double *lat, cuRNGState *rng_state, int n4, int k4, int n2,
 		exit(1);
 	}
 	fileout.precision(12);
-		
+	
 	for(int r = 0; r < radius; ++r){
-		cout << r+1 << '\t' << res[r].real() << '\t' << res[r].imag() << endl;
-		fileout << r+1 << '\t' << res[r].real() << '\t' << res[r].imag() << endl;
+		cout << r+1 << '\t' << res->at(r) << endl;
+		fileout << r+1 << '\t' << res->at(r) << endl;
 	}
 	
-	fileout.close();		
-	//host_free(res);
-	return(res);
+	fileout.close();	
+	return res;
 } 
 
 

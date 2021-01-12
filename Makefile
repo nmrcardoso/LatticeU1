@@ -55,7 +55,7 @@ OBJS := timer.o alloc.o parameters.o random.o update.o multilevel.o plaquette.o 
 
 INCS:= include
 U1OBJS  := $(patsubst %.o,$(OBJDIR)/%.o,$(OBJS))
-deps += $(CUDAOBJS:.o=.d)
+deps += $(U1OBJS:.o=.d)
 
 
 
@@ -65,9 +65,9 @@ deps += $(CUDAOBJS:.o=.d)
 $(OBJDIR)/%.o: $(SRCDIR)/%.cu
 	@echo "######################### Compiling: "$<" #########################"
 	$(VERBOSE)mkdir -p $(dir $(abspath $@ ) )
-	$(VERBOSE)$(NVCC) $(NVCCFLAGS) $(GENCODE_FLAGS) $(EXTRA_NVCCFLAGS) $(INCLUDES) -M $< -o ${@:.o=.d} \
-		-odir $(@D)
-	$(VERBOSE)$(NVCC) $(NVCCFLAGS) $(GENCODE_FLAGS) $(EXTRA_NVCCFLAGS) $(INCLUDES) -dc $< -o $@
+	$(VERBOSE)$(NVCC) $(NVCCFLAGS) $(GENCODE_FLAGS) $(EXTRA_NVCCFLAGS) $(INCLUDES) -M $< -o ${@:.o=.d} -odir $(@D)
+	$(VERBOSE)$(NVCC) $(NVCCFLAGS) $(GENCODE_FLAGS) $(EXTRA_NVCCFLAGS) $(INCLUDES) -o $@ -dc $<
+#	$(VERBOSE)$(NVCC) $(NVCCFLAGS) $(GENCODE_FLAGS) $(EXTRA_NVCCFLAGS) $(INCLUDES) -dc $< -o $@
 	
 ############################################################################################################CUDAOBJ=$
 $(OBJDIR)/dlink.o: $(U1OBJS)
@@ -83,9 +83,6 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.cpp
 	@echo "######################### Compiling: "$<" #########################"
 	$(VERBOSE)$(GCC) $(CCFLAGS) $(INC_DIR) $(INCLUDES) -MMD -MP -c $< -o $@ 
 
-$(OBJDIR)/%.o: $(SRCDIR)/%.c
-	@echo "######################### Compiling: "$<" #########################"
-	$(VERBOSE)$(GCC) $(CCFLAGS) $(INC_DIR) $(INCLUDES) -MMD -MP   -c $< -o $@ 
 
 
 $(PROJECTNAME):  $(MAINOBJ) $(U1OBJS) $(OBJDIR)/dlink.o

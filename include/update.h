@@ -3,12 +3,13 @@
 
 
 #include "random.h"
+#include "array.h"
 
 namespace U1{
 
-void HotStart(double *dev_lat, cuRNGState *rng_state);
+void HotStart(Array<double> *dev_lat, CudaRNG *rng_state);
 
-void UpdateLattice(double *dev_lat, cuRNGState *rng_state, int metrop, int ovrn);
+void UpdateLattice(Array<double> *dev_lat, CudaRNG *rng_state, int metrop, int ovrn);
 
 }
 

@@ -47,13 +47,13 @@ void Start(int gpuid, Verbosity verb=VERBOSE, TuneMode tune=TUNE_YES);
 void Finalize_(const char *func, const char *file, int line, int error);
 #define Finalize(_error_) Finalize_(__func__, U1::file_name(__FILE__), __LINE__, _error_)
  
-#define printfSbreak(abc,...) printf(abc, ##__VA_ARGS__);
+#define printfU1(abc,...) printf(abc, ##__VA_ARGS__);
 #define printfError(abc,...) do {  \
   printf("Error in %s: %d in %s()\n\t",__FILE__,__LINE__, __func__);  \
   printf(abc, ##__VA_ARGS__); \
   Finalize(1); \
 } while (0)
-#define errorSbreak(abc,...) do {  \
+#define errorU1(abc,...) do {  \
   printf("Error in %s: %d in %s()\n\t",__FILE__,__LINE__, __func__);  \
   printf(abc, ##__VA_ARGS__); \
   Finalize(1); \

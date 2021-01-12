@@ -39,11 +39,11 @@ __global__ void kernel_hotstart(double *lat, cuRNGState *rng_state){
     rng_state[ id ] = localState;
 }
 
-void HotStart(double *dev_lat, cuRNGState *rng_state){
+void HotStart(Array<double> *dev_lat, CudaRNG *rng_state){
 	// kernel number of threads per block and number os blocks
 	int threads = 128;
 	int blocks = (HalfVolume() + threads - 1) / threads;
-	kernel_hotstart<<<blocks,threads>>>(dev_lat, rng_state);
+	kernel_hotstart<<<blocks,threads>>>(dev_lat->getPtr(), rng_state->getPtr());
 }
 
 
@@ -147,19 +147,19 @@ __global__ void kernel_overrelaxation(double *lat, int parity, int mu){
 
 
 
-void UpdateLattice1(double *dev_lat, cuRNGState *rng_state, int metrop, int ovrn){
+void UpdateLattice1(Array<double> *dev_lat, CudaRNG *rng_state, int metrop, int ovrn){
 	int threads = 128;
 	int blocks = (HalfVolume() + threads - 1) / threads;
 	// metropolis algorithm
 	for(int m = 0; m < metrop; ++m)
 	for(int parity = 0; parity < 2; ++parity)
 	for(int mu = 0; mu < Dirs(); ++mu)
-		kernel_metropolis<<<blocks,threads>>>(dev_lat, parity, mu, rng_state);
+		kernel_metropolis<<<blocks,threads>>>(dev_lat->getPtr(), parity, mu, rng_state->getPtr());
 	// overrelaxation algorithm 
 	for(int ovr = 0; ovr < ovrn; ++ovr)
 	for(int parity = 0; parity < 2; ++parity)
 	for(int mu = 0; mu < Dirs(); ++mu)
-		kernel_overrelaxation<<<blocks,threads>>>(dev_lat, parity, mu);	
+		kernel_overrelaxation<<<blocks,threads>>>(dev_lat->getPtr(), parity, mu);	
 }
 
 
@@ -186,10 +186,8 @@ using namespace U1;
 
 class Metropolis: Tunable{
 private:
-	double* lat;
-	double* tmp;
-	cuRNGState *rng_state;
-	cuRNGState *state;
+	Array<double>* lat;
+	CudaRNG *rng_state;
 	int metrop;
 	int parity;
 	int mu;
@@ -206,10 +204,10 @@ private:
    unsigned int minThreads() const { return size; }
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-	kernel_metropolis<<<tp.grid,tp.block, 0, stream>>>(lat, parity, mu, rng_state);
+	kernel_metropolis<<<tp.grid,tp.block, 0, stream>>>(lat->getPtr(), parity, mu, rng_state->getPtr());
 }
 public:
-   Metropolis(double* lat, cuRNGState *rng_state, int metrop) : lat(lat), rng_state(rng_state), metrop(metrop){
+   Metropolis(Array<double>* lat, CudaRNG *rng_state, int metrop) : lat(lat), rng_state(rng_state), metrop(metrop){
 	size = HalfVolume();
 	timesec = 0.0;  
 }
@@ -253,17 +251,12 @@ public:
     return ps.str();
   }
   void preTune() {
-	tmp = (double*)dev_malloc(Volume()*Dirs()*sizeof(double));
-	cudaSafeCall(cudaMemcpy(tmp, lat, Volume()*Dirs()*sizeof(double), cudaMemcpyDeviceToDevice));
-	
-	state = (cuRNGState*)dev_malloc(HalfVolume()*sizeof(cuRNGState));	
-	cudaSafeCall(cudaMemcpy(state, rng_state, HalfVolume()*sizeof(cuRNGState), cudaMemcpyDeviceToDevice));	
+  	lat->Backup();
+	rng_state->Backup();
   }
   void postTune() {  
-	cudaSafeCall(cudaMemcpy(lat, tmp, Volume()*Dirs()*sizeof(double), cudaMemcpyDeviceToDevice));
-	cudaSafeCall(cudaMemcpy(rng_state, state, HalfVolume()*sizeof(cuRNGState), cudaMemcpyDeviceToDevice));
-	dev_free(tmp);
-	dev_free(state);
+	lat->Restore();
+	rng_state->Restore();
  }
 
 };
@@ -272,8 +265,7 @@ public:
 
 class OverRelaxation: Tunable{
 private:
-	double* lat;
-	double* tmp;
+	Array<double>* lat;
 	int ovrn;
 	int parity;
 	int mu;
@@ -290,10 +282,10 @@ private:
    unsigned int minThreads() const { return size; }
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-	kernel_overrelaxation<<<tp.grid,tp.block, 0, stream>>>(lat, parity, mu);
+	kernel_overrelaxation<<<tp.grid,tp.block, 0, stream>>>(lat->getPtr(), parity, mu);
 }
 public:
-   OverRelaxation(double* lat, int ovrn) : lat(lat), ovrn(ovrn){
+   OverRelaxation(Array<double>* lat, int ovrn) : lat(lat), ovrn(ovrn){
 	size = HalfVolume();
 	timesec = 0.0;  
 }
@@ -337,12 +329,10 @@ public:
     return ps.str();
   }
   void preTune() {
-	tmp = (double*)dev_malloc(Volume()*Dirs()*sizeof(double));
-	cudaSafeCall(cudaMemcpy(tmp, lat, Volume()*Dirs()*sizeof(double), cudaMemcpyDeviceToDevice));		
+	lat->Backup();		
   }
   void postTune() {  
-	cudaSafeCall(cudaMemcpy(lat, tmp, Volume()*Dirs()*sizeof(double), cudaMemcpyDeviceToDevice));
-	dev_free(tmp);
+	lat->Restore();
  }
 
 };
@@ -370,7 +360,7 @@ public:
 
 
 
-void UpdateLattice(double *dev_lat, cuRNGState *rng_state, int metrop, int ovrn){
+void UpdateLattice(Array<double> *dev_lat, CudaRNG *rng_state, int metrop, int ovrn){
 	// metropolis algorithm
 	Metropolis mtp(dev_lat, rng_state, metrop);
 	mtp.Run();

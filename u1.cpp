@@ -97,9 +97,6 @@ int main(){
 	Array<double> *lattice = new Array<double>(Device, Volume()*Dirs()); //also initialize aray to 0
 	//Initialize cuda rng
 	CudaRNG *rng = new CudaRNG(1234, HalfVolume());
-	//cuRNGState *rng_state = Init_Device_RNG(1234);
-	// cuda memory container for global reductions, used in plaquette and polyakov calculations
-	complexd *dev_tmp = (complexd*)dev_malloc(sizeof(complexd));
 
 	if(hotstart){
 		HotStart(lattice, rng);
@@ -178,8 +175,6 @@ int main(){
 	fileout.close();
 	fileout1.close();
 	
-	
-	dev_free(dev_tmp);
 	delete lattice;
 	delete rng;
 	t0.stop();

@@ -665,16 +665,11 @@ Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int 
 	int radius = Grid(0)/2;
 	int nl2 = Grid(TDir())/2;
 	int sl2 = nl2*(Dirs()-1)*radius*SpatialVolume();
-	//complexd *l2 = (complexd*)dev_malloc(sl2*sizeof(complexd));
 	Array<complexd> *l2 = new Array<complexd>(Device, sl2);
 	int nl4 = Grid(TDir())/4;
 	size_t sl4 = nl4*(Dirs()-1)*radius*SpatialVolume();
 	Array<complexd> *l4 = new Array<complexd>(Device, sl4);
-	//complexd *l4 = (complexd*)dev_malloc(sl4*sizeof(complexd));
 	
-	
-	
-
 	// metropolis and overrelaxation algorithm
 	Metropolis_ML<4> mtp4(dev_lat, rng_state, metrop);
 	OverRelaxation_ML<4> ovr4(dev_lat, ovrn);

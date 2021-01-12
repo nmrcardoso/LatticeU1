@@ -47,10 +47,15 @@ void Start(int gpuid, Verbosity verb, TuneMode tune){
 void Finalize_(const char *func, const char *file, int line, int error){
 	cudaSafeCall(cudaDeviceSynchronize());
   	if(getTuning()==TUNE_YES) saveTuneCache(getVerbosity());
+	printPeakMemUsage();
+    assertAllMemFree();
+	total_time.stop();
+    std::cout << "Total Time: " << total_time.getElapsedTime() << " s" << std::endl;
+	//FreeAllMemory();
 	/*cudaSafeCall(cudaDeviceSynchronize());
-	alloc::printPeakMemUsage();
-    //assertAllMemFree();
-	alloc::FreeAllMemory();
+	printPeakMemUsage();
+    assertAllMemFree();
+	FreeAllMemory();
     cudaError err = cudaDeviceReset();
     if( cudaSuccess != err) {
         fprintf(stderr, "Cuda error in file %s:%i in %s: %s.\n", file, line, func, cudaGetErrorString( err) );

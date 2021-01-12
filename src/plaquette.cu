@@ -178,10 +178,10 @@ public:
 
 
 
-complexd Plaquette(Array<double> *dev_lat){
+complexd Plaquette(Array<double> *dev_lat, bool print){
 	Plaquette1 plaq1(dev_lat);
 	complexd plaq = plaq1.Run();
-	cout << "plaq: " << plaq.real() << '\t' << plaq.imag() << endl;
+	if(print) cout << "plaq: " << plaq.real() << '\t' << plaq.imag() << endl;
 	return plaq;
 } 
 

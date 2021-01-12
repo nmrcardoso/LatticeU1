@@ -9,7 +9,7 @@ namespace U1{
 
 void plaquette(double *lat, double *plaq);
 
-complexd Plaquette(Array<double> *dev_lat);
+complexd Plaquette(Array<double> *dev_lat, bool print=true);
 
 }
 

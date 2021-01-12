@@ -33,7 +33,7 @@ int main(){
 	
 	//omp_set_num_threads(1);
 	int gpuID = 0;
-	Start(gpuID);
+	Start(gpuID); // Important. Setup GPU id and setup tune kernels and verbosity level. See cuda_error_check.cpp/.h
 	
 	
 	int numthreads = 0;
@@ -90,7 +90,7 @@ int main(){
 	Timer t0;
 	t0.start();
 	
-	SetupGPU_Parameters();
+	SetupGPU_Parameters(); // Copy parameters to GPU constant memory, need to be setup before any kernel call
 	            
 
 	//Array array to store the phases
@@ -151,52 +151,28 @@ int main(){
 		if( PARAMS::iter > 990 && (PARAMS::iter%printiter)==0){
 			cout << "################################" << endl;
 			Timer p0, p1, p2, p3;
-			/*cout << "############## P(0)*conj(P(r)) version 0 ##################" << endl;
-			p0.start();
-			for(int r=1; r<=Grid(0)/2; ++r){
-				complexd ployv2 = dev_polyakov2(lattice.getPtr(), dev_tmp, r, threads, pblocks);
-				cout << r << '\t' << ployv2 << endl;
-			}
-			p0.stop();
-			std::cout << "p0: " << p0.getElapsedTime() << " s" << endl;*/
-			/*cout << "############## P(0)*conj(P(r)) version 1 ##################" << endl;
-			p1.start();
-			poly2(lattice.getPtr());
-			p1.stop();
-			std::cout << "p1: " << p1.getElapsedTime() << " s" << endl;
-			cout << "########### P(0)*conj(P(r)) Using MultiHit #####################" << endl;
-			p2.start();
-			poly2_mhit(lattice.getPtr());
-			p2.stop();
-			std::cout << "p2: " << p2.getElapsedTime() << " s" << endl;		*/	
-			
 			cout << "########### P(0)*conj(P(r)) #####################" << endl;
-			p2.start();
+			p0.start();
 			Array<complexd>* res = Poly2(lattice, false);
 			delete res;
-			p2.stop();
-			std::cout << "p2: " << p2.getElapsedTime() << " s" << endl;			
-			
+			p0.stop();
+			std::cout << "p0: " << p0.getElapsedTime() << " s" << endl;	
 			cout << "########### P(0)*conj(P(r)) Using MultiHit #####################" << endl;
-			p2.start();
+			p1.start();
 			res = Poly2(lattice, true);
 			delete res;
-			p2.stop();
-			std::cout << "p2: " << p2.getElapsedTime() << " s" << endl;					
-			
-			
+			p1.stop();
+			std::cout << "p1: " << p1.getElapsedTime() << " s" << endl;			
 			cout << "########### P(0)*conj(P(r)) Using MultiLevel #####################" << endl;
-			p3.start();
+			p2.start();
 			//MultiLevel(lattice.getPtr(), rng.getPtr(), 50, 10, 50, 10, 2, 5);
 			//MultiLevel(lattice.getPtr(), rng.getPtr(), 1, 1, 1, 1, 1, 3);
 			//res = MultiLevel(lattice.getPtr(), rng.getPtr(), 1, 0, 1, 0, 1, 3);
 			Array<complexd>* results = MultiLevel(lattice, rng, 10, 16, 25, 5, 2, 5);
 			delete results;
-			p3.stop();
-			std::cout << "p3: " << p3.getElapsedTime() << " s" << endl;
-			cout << "################################" << endl;
-			
-			
+			p2.stop();
+			std::cout << "p2: " << p2.getElapsedTime() << " s" << endl;
+			cout << "################################" << endl;			
 		}			
 	}
 	fileout.close();
@@ -209,7 +185,7 @@ int main(){
 	t0.stop();
 	std::cout << "Time: " << t0.getElapsedTime() << " s" << endl;
 	
-	Finalize(0);
+	Finalize(0); // Important to save tunned kernels to file
 	return 0;
 /*	
 	//CPU CODE

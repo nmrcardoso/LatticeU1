@@ -12,6 +12,7 @@
 
 #include "cuda_error_check.h"
 #include "enum.h"
+#include "parameters.h"
 
 
 namespace U1{
@@ -39,6 +40,24 @@ void setVerbosity(Verbosity verbosein){
 
 
 
+
+std::string GetLatticeName(){
+	std::string name = "";
+	for(int i = 0; i < Dirs(); i++) name += ToString(PARAMS::Grid[i]) + "_";;
+	name += "beta_" +  ToString(PARAMS::Beta);
+	name += "_xi_" +  ToString(PARAMS::Aniso);	
+	name += "_mtr_" +  ToString(PARAMS::metrop);
+	name += "_ovr_" +  ToString(PARAMS::ovrn);
+	return name;
+}
+
+
+
+std::string GetLatticeNameI(){
+	std::string name = GetLatticeName();
+	name += "_iter_" + ToString(PARAMS::iter);
+	return name;
+}
 
 
 
@@ -102,70 +121,6 @@ void SetupGPU_Parameters(){
 }
 
 
-
-
-InlineHostDevice int Volume(){
-    #ifdef __CUDA_ARCH__
-    return DEVPARAMS::volume;
-    #else
-    return PARAMS::volume;
-    #endif
-}
-InlineHostDevice int HalfVolume(){
-    #ifdef __CUDA_ARCH__
-    return DEVPARAMS::half_volume;
-    #else
-    return PARAMS::half_volume;
-    #endif
-}
-InlineHostDevice int SpatialVolume(){
-    #ifdef __CUDA_ARCH__
-    return DEVPARAMS::spatial_volume;
-    #else
-    return PARAMS::spatial_volume;
-    #endif
-}
-InlineHostDevice int Grid(int dim){
-    #ifdef __CUDA_ARCH__
-    return DEVPARAMS::Grid[dim];
-    #else
-    return PARAMS::Grid[dim];
-    #endif
-}
-InlineHostDevice double Beta(){
-    #ifdef __CUDA_ARCH__
-    return DEVPARAMS::Beta;
-    #else
-    return PARAMS::Beta;
-    #endif
-}
-InlineHostDevice int Dirs(){
-    #ifdef __CUDA_ARCH__
-    return DEVPARAMS::DIRS;
-    #else
-    return PARAMS::DIRS;
-    #endif
-}
-InlineHostDevice int TDir(){
-    #ifdef __CUDA_ARCH__
-    return DEVPARAMS::TDir;
-    #else
-    return PARAMS::TDir;
-    #endif
-}
-InlineHostDevice double Aniso(){
-    #ifdef __CUDA_ARCH__
-    return DEVPARAMS::Aniso;
-    #else
-    return PARAMS::Aniso;
-    #endif
-}
-
-
-#define memcpyToSymbol(dev, host, type)                                 \
-    cudaSafeCall(cudaMemcpyToSymbol(dev,  &host,  sizeof(type), 0, cudaMemcpyHostToDevice ));
-#define memcpyToArraySymbol(dev, host, type, length)                    \
-    cudaSafeCall(cudaMemcpyToSymbol(dev,  host,  length * sizeof(type), 0, cudaMemcpyHostToDevice ));
 
 
 

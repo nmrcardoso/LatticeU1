@@ -50,7 +50,7 @@ $(MAINOBJ): u1.cpp
 
 
 
-OBJS := timer.o alloc.o parameters.o random.o update.o multilevel.o plaquette.o polyakov.o tune.o cuda_error_check.o
+OBJS := timer.o alloc.o parameters.o random.o update.o multilevel.o plaquette.o polyakov.o tune.o cuda_error_check.o actime.o
 
 
 INCS:= include

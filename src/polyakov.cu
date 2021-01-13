@@ -669,8 +669,9 @@ Array<complexd>* Poly2(Array<double> *lat, bool multihit){
 	if(poly) delete poly;
 	
 	std::ofstream fileout;
-	std::string filename = "Pot_" + GetLatticeName() + ".dat";
-	if(multihit) filename = "Pot_mhit_" + GetLatticeName() + ".dat";
+	std::string filename = "";
+	if(multihit) filename = "Pot_mhit_" + GetLatticeNameI() + ".dat";
+	else filename = "Pot_" + GetLatticeNameI() + ".dat";
 	fileout.open (filename.c_str());
 	if (!fileout.is_open()) {
 		std::cout << "Error opening file: " << filename << std::endl;

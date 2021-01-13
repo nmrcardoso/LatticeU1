@@ -135,11 +135,11 @@ class Array{
 		switch(location){
 			case Host:
 				tmp = (Real*)safe_malloc(insize*sizeof(Real));
-				if(getVerbosity() >= DEBUG_VERBOSE) std::cout << "Allocate array in Host with: " << float(size*sizeof(Real))/1048576. << " MB" << std::endl;
+				if(getVerbosity() >= DEBUG_VERBOSE) std::cout << "Allocate array " << tmp << " in Host with: " << float(size*sizeof(Real))/1048576. << " MB" << std::endl;
 			break;
 			case Device:
 				tmp = (Real*)dev_malloc(insize*sizeof(Real));
-				if(getVerbosity() >= DEBUG_VERBOSE) std::cout << "Allocate array in Device with: " << float(size*sizeof(Real))/1048576. << " MB" << std::endl;
+				if(getVerbosity() >= DEBUG_VERBOSE) std::cout << "Allocate array " << tmp << " in Device with: " << float(size*sizeof(Real))/1048576. << " MB" << std::endl;
 			break;
 		}	
 		return tmp;
@@ -152,11 +152,11 @@ class Array{
 		if(ptr){
 			switch(location){
 				case Host:
-				    if(getVerbosity() >= DEBUG_VERBOSE) std::cout << "Release array in Host with: " << float(size*sizeof(Real))/1048576. << " MB" << std::endl;
+				    if(getVerbosity() >= DEBUG_VERBOSE) std::cout << "Release array " << ptr << " in Host with: " << float(size*sizeof(Real))/1048576. << " MB" << std::endl;
 					host_free(ptr);
 				break;
 				case Device:
-					if(getVerbosity() >= DEBUG_VERBOSE) std::cout << "Release array in Device with: " << float(size*sizeof(Real))/1048576. << " MB" << std::endl;
+					if(getVerbosity() >= DEBUG_VERBOSE) std::cout << "Release array " << ptr << " in Device with: " << float(size*sizeof(Real))/1048576. << " MB" << std::endl;
 					dev_free(ptr);
 				break;
 			}

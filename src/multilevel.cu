@@ -385,7 +385,7 @@ __global__ void kernel_l2_multilevel_1(complexd *poly, complexd *l2, int radius)
 
 class L2ML: Tunable{
 private:
-	Array<complexd>* poly;
+	Array<complexd> *poly;
 	Array<complexd> *l2;
 	size_t sl2;
 	int radius;
@@ -719,13 +719,19 @@ Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int 
 			delete res;
 		}
 	}
-	delete dev_lat, dev_mhit, l2;
+	delete dev_lat;
+	delete dev_mhit;
+	delete l2;
 	//Average tensor T4 and Calculate P(0)*conj(P(r))	
 	Array<complexd>* res = l4avgpp.Run();
 	delete l4;
 
 	std::ofstream fileout;
-	std::string filename = "Pot_mlevel_" + GetLatticeName() + ".dat";
+	std::string filename = "Pot_mlevel_" + GetLatticeNameI();
+	filename += "_" + ToString(n4) + "_" + ToString(k4);
+	filename += "_" + ToString(n2) + "_" + ToString(k2);
+	filename += "_" + ToString(metrop) + "_" + ToString(ovrn);
+	filename += ".dat";
 	fileout.open (filename.c_str());
 	if (!fileout.is_open()) {
 		std::cout << "Error opening file: " << filename << std::endl;

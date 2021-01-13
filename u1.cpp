@@ -20,9 +20,16 @@
 
 
 #include "array.h"
+#include "actime.h"
 
 using namespace std;
 using namespace U1;
+
+
+
+
+
+
 
 
 
@@ -33,7 +40,7 @@ int main(){
 	
 	//omp_set_num_threads(1);
 	int gpuID = 0;
-	Start(gpuID); // Important. Setup GPU id and setup tune kernels and verbosity level. See cuda_error_check.cpp/.h
+	Start(gpuID, VERBOSE, TUNE_YES); // Important. Setup GPU id and setup tune kernels and verbosity level. See cuda_error_check.cpp/.h
 	
 	
 	int numthreads = 0;
@@ -96,8 +103,8 @@ int main(){
 	//Array array to store the phases
 	Array<double> *lattice = new Array<double>(Device, Volume()*Dirs()); //also initialize aray to 0
 	//Initialize cuda rng
-	CudaRNG *rng = new CudaRNG(1234, HalfVolume());
-
+	int seed = 1234;
+	CudaRNG *rng = new CudaRNG(seed, HalfVolume());
 	if(hotstart){
 		HotStart(lattice, rng);
 	}
@@ -106,9 +113,7 @@ int main(){
 	complexd ployv = Polyakov(lattice);
 	
 	
-	string filename = "";
-	for(int i = 0; i < PARAMS::DIRS; ++i) filename += ToString(PARAMS::Grid[i]) + "_";
-	filename += ToString(PARAMS::Beta) + "_" + ToString(PARAMS::ovrn) + "_" + ToString(hotstart) + ".dat";
+	string filename = GetLatticeName() + ".dat";
 	
     ofstream fileout;
     string filename1 = "plaq_" + filename;
@@ -132,18 +137,28 @@ int main(){
     
     fileout << PARAMS::iter << '\t' << plaqv.real() << '\t' << plaqv.imag() << endl;
     
+    vector<double> plaq_corr;
+	int mininter = 600;
 	for(PARAMS::iter = 1; PARAMS::iter <= maxIter; ++PARAMS::iter){
 		// metropolis and overrelaxation algorithm 
 		UpdateLattice(lattice, rng,  PARAMS::metrop, PARAMS::ovrn);
 		
-		if( (PARAMS::iter%printiter)==0){
+		if(0)
+		if(PARAMS::iter >= mininter){
+			plaqv = Plaquette(lattice, false);
+			plaq_corr.push_back(plaqv.real());
+				
+			int nsweep = 0;
+			//calculateCorTime(mininter+100, PARAMS::iter, plaq_corr, nsweep);
+			calculateCorTime(50, PARAMS::iter, plaq_corr, nsweep);
+		}
+		
+		if((PARAMS::iter%printiter)==0){
 			cout << "Iter: " << PARAMS::iter << " \t";
-			//plaqv = dev_plaquette(lattice.getPtr(), dev_tmp, norm, threads, blocks);
-			//ployv = dev_polyakov(lattice.getPtr(), dev_tmp, threads, pblocks);
 			plaqv = Plaquette(lattice);
 			ployv = Polyakov(lattice);
 			fileout << PARAMS::iter << '\t' << plaqv.real() << '\t' << plaqv.imag() << endl;
-			fileout1 << PARAMS::iter << '\t' << ployv.real() << '\t' << ployv.imag() << '\t' << ployv.abs() << endl;
+			fileout1 << PARAMS::iter << '\t' << ployv.real() << '\t' << ployv.imag() << '\t' << ployv.abs() << endl;			
 		}
 		if( PARAMS::iter > 990 && (PARAMS::iter%printiter)==0){
 			cout << "################################" << endl;
@@ -162,9 +177,9 @@ int main(){
 			std::cout << "p1: " << p1.getElapsedTime() << " s" << endl;			
 			cout << "########### P(0)*conj(P(r)) Using MultiLevel #####################" << endl;
 			p2.start();
-			//MultiLevel(lattice.getPtr(), rng.getPtr(), 50, 10, 50, 10, 2, 5);
-			//MultiLevel(lattice.getPtr(), rng.getPtr(), 1, 1, 1, 1, 1, 3);
-			//res = MultiLevel(lattice.getPtr(), rng.getPtr(), 1, 0, 1, 0, 1, 3);
+			//MultiLevel(lattice, rng, 50, 10, 50, 10, 2, 5);
+			//MultiLevel(lattice, rng, 1, 1, 1, 1, 1, 3);
+			//Array<complexd>* results = MultiLevel(lattice, rng, 1, 0, 1, 0, 1, 3);
 			Array<complexd>* results = MultiLevel(lattice, rng, 10, 16, 25, 5, 2, 5);
 			delete results;
 			p2.stop();
@@ -229,3 +244,4 @@ int main(){
 	return 0;*/
 	
 }
+

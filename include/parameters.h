@@ -12,14 +12,6 @@
 
 namespace U1{
 
-TuneMode getTuning();
-Verbosity getVerbosity();
-
-void setTuning(TuneMode kerneltunein);
-void setVerbosity(Verbosity verbosein);
-
-dim3 GetBlockDim(size_t threads, size_t size);
-
 
 
 #if defined(XORWOW)
@@ -33,6 +25,28 @@ typedef struct curandStateMRG32k3a cuRNGState;
 
 #define  InlineHostDevice inline  __host__   __device__
 #define ConstDeviceMem __constant__
+
+
+
+
+TuneMode getTuning();
+Verbosity getVerbosity();
+
+void setTuning(TuneMode kerneltunein);
+void setVerbosity(Verbosity verbosein);
+
+dim3 GetBlockDim(size_t threads, size_t size);
+
+
+
+
+
+std::string GetLatticeName();
+
+std::string GetLatticeNameI();
+
+
+
 
 namespace DEVPARAMS{
 	extern ConstDeviceMem   double   Beta;
@@ -145,13 +159,7 @@ inline std::string ToString<float>(const float number){
 }
 
 
-inline std::string GetLatticeName(){
-	std::string name = "";
-	for(int i = 0; i < Dirs(); i++) name += ToString(Grid(i)) + "_";
-	name += ToString(Beta());
-	name += "_" + ToString(PARAMS::iter);
-	return name;
-}
+
 
 }
 #endif

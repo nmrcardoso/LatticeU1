@@ -140,65 +140,6 @@ void calculateCorTime(int miniter, int iter, std::vector<double> &gamma, int &ns
 	cout << "Wopt: " << Wopt << endl;
 	
 	
-	
-	
-	
-	 
-	 
-	 
-	 
-	 
-
-
-
-
-
-
-
-
-
-
-
-/*
-
-
-
-
-	std::vector<double> corr;
-	double rho=0.;
-	for(int j = 0; j < gamma.size(); ++j){
-		double g0 = 0.;
-		double gt = 0.;
-		for(int i = 0; i < gamma.size()-j; ++i){
-			g0 += gamma[i];
-			gt += gamma[i+j];
-		}
-		double norm = 1.0 / double(gamma.size()-j);
-		g0 *= norm;
-		gt /= norm;
-		double ga = 0.;
-		for(int i = 0; i < gamma.size()-j; ++i){
-			ga += (gamma[i] - g0) * (gamma[i+j] - gt);
-			//ga += (gamma[i] - avg) * (gamma[i+j] - avg);
-		}
-		ga *= norm;
-		if(j==0) rho = ga;//std::cout << rho << '\t' << ga << '\t' << ga/rho << std::endl;
-		corr.push_back(ga/rho);
-	}
-	
-
-	double tau_int = 0.5;
-	for(int i = 1; i < gamma.size();++i){
-		tau_int += corr[i-1];
-		int tauInt = int(4.*tau_int+1);
-		if( i > tauInt ) {
-			nsweep = i;
-			std::cout << "iter: " << iter << "\tsweeps: " << nsweep << "\ttau_int: " << tau_int << "\tint(4.*tau_int+1): " << tauInt << std::endl;
-			gamma.clear();
-			//calc = true;
-			break;
-		}
-	}	*/
 	//a0.stop();
 	//std::cout << "AC Time: " << a0.getElapsedTime() << " s" << std::endl;
 	//std::cout << "-----------------------------------------" << std::endl;

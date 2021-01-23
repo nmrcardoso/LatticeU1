@@ -9,9 +9,65 @@
 #include <math.h>
 
 
-#include <cuda_common.h>
 #include <cuda_vector_types.h>
 
+
+
+    ////////////////////////////////////////////////////////////////////////////
+    //! Macros
+
+    // Depending on whether we're running inside the CUDA compiler, define the __host_
+    // and __device__ intrinsics, otherwise just make the functions static to prevent
+    // linkage issues (duplicate symbols and such)
+#ifdef __CUDACC__
+//#define HOST __host__
+#define DEVICE __device__
+#define HOSTDEVICE __host__ __device__ 
+#define M_HOST __host__
+#define M_HOSTDEVICE __host__ __device__ inline
+#else
+//#define HOST static inline
+#define DEVICE static inline
+#define HOSTDEVICE static inline
+#define M_HOST inline       // note there is no static here
+#define M_HOSTDEVICE inline // (static has a different meaning for class member functions)
+#endif
+    /*
+      #define HOST static inline
+      #define DEVICE static inline __device__
+      #define HOSTDEVICE static inline __host__ __device__
+      #define M_HOST inline      // note there is no static here
+      #define M_HOSTDEVICE inline __host__ __device__ // (static has a different meaning for class member functions)
+    */
+
+    // Struct alignment is handled differently between the CUDA compiler and other
+    // compilers (e.g. GCC, MS Visual C++ .NET)
+#ifdef __CUDACC__
+#define ALIGN(x)  __align__(x)
+#else
+#if defined(_MSC_VER) && (_MSC_VER >= 1300)
+    // Visual C++ .NET and later
+#define ALIGN(x) __declspec(align(x)) 
+#else
+#if defined(__GNUC__)
+    // GCC
+#define ALIGN(x)  __attribute__ ((aligned (x)))
+#else
+    // all other compilers
+#define ALIGN(x) 
+#endif
+#endif
+#endif
+
+#if !defined(__DEVICE_EMULATION__) || (defined(_MSC_VER) && (_MSC_VER >= 1300))
+#define REF(x) &x
+#define ARRAYREF(x,y) (&x)[y]
+#define PTR(x) *x
+#else
+#define REF(x) x
+#define ARRAYREF(x,y) x[y]
+#define PTR(x) *x
+#endif
 
 
 /**
@@ -116,7 +172,7 @@ class _complex {
     return result;
   }
     friend M_HOSTDEVICE _complex<Real> operator-(const Real REF(a), const _complex<Real>& z){
-      return _complex(a - z.val.x, -z.val.y);
+      return _complex(a-z.val.x, -z.val.y);
     }
   // negate a complex number
   M_HOSTDEVICE _complex<Real> operator-() const {

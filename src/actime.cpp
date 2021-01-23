@@ -139,7 +139,6 @@ void calculateCorTime(int miniter, int iter, std::vector<double> &gamma, int &ns
 	cout << "dtauint: " << dtauint << endl;
 	cout << "Wopt: " << Wopt << endl;
 	
-	
 	//a0.stop();
 	//std::cout << "AC Time: " << a0.getElapsedTime() << " s" << std::endl;
 	//std::cout << "-----------------------------------------" << std::endl;

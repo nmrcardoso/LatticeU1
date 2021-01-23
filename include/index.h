@@ -11,17 +11,107 @@
 namespace U1{
 
 
-inline  __host__   __device__ void indexNO3D(const int id, int x[3]){
+InlineHostDevice complexd exp_ir(const double a){
+	return complexd(cos(a), sin(a));
+}
+
+
+InlineHostDevice int indexIdS(const int x[]){
+	int id = x[0];
+	for(int i = 1; i < Dirs()-1; i++)
+		id += x[i] * Offset(i);
+	return id;
+}
+InlineHostDevice int indexId(const int x[]){
+	int id = x[0];
+	for(int i = 1; i < Dirs(); i++)
+		id += x[i] * Offset(i);
+	return id;
+}
+
+InlineHostDevice int GetParity(const int x[]){
+	int oddbit = 0;
+	for(int i = 0; i < Dirs(); i++) oddbit += x[i];
+	return (oddbit & 1);
+}
+InlineHostDevice int GetParityS(const int x[]){
+	int oddbit = 0;
+	for(int i = 0; i < Dirs()-1; i++) oddbit += x[i];
+	return (oddbit & 1);
+}
+InlineHostDevice int GetParity(const int x[], const int maxdir){
+	int oddbit = 0;
+	for(int i = 0; i <= maxdir; i++) oddbit += x[i];
+	return (oddbit & 1);
+}
+
+
+
+
+InlineHostDevice void indexNO(const int id, int x[4]){
+	x[3] = id/(Grid(0) * Grid(1) * Grid(2));
 	x[2] = (id/(Grid(0) * Grid(1))) % Grid(2);
 	x[1] = (id/Grid(0)) % Grid(1);
 	x[0] = id % Grid(0);
 }
 
-inline  __host__   __device__ complexd exp_ir(double a){
-	return complexd(cos(a), sin(a));
+
+
+InlineHostDevice int indexNO_neg(const int id, const int mu, const int lmu){
+	int x[4];
+	indexNO(id, x);
+	x[mu] = (x[mu]+lmu+Grid(mu)) % Grid(mu);	
+	int pos = indexId(x);
+	return pos;
+}
+InlineHostDevice int indexNO_neg(const int id, const int mu, const int lmu, const int nu, const int lnu){
+	int x[4];
+	indexNO(id, x);
+	x[mu] = (x[mu]+lmu+Grid(mu)) % Grid(mu);
+	x[nu] = (x[nu]+lnu+Grid(nu)) % Grid(nu);	
+	int pos = indexId(x);
+	return pos;
 }
 
-InlineHostDevice void indexEO(int id, int parity, int x[4]){
+
+
+
+
+InlineHostDevice void indexNOSD(const int id, int x[3]){
+	x[2] = (id/(Grid(0) * Grid(1))) % Grid(2);
+	x[1] = (id/Grid(0)) % Grid(1);
+	x[0] = id % Grid(0);
+}
+
+InlineHostDevice int indexNOSD_neg(const int id, const int mu, const int lmu){
+	int x[3];
+	indexNOSD(id, x);
+	x[mu] = (x[mu]+lmu+Grid(mu)) % Grid(mu);	
+	int pos = indexIdS(x);
+	return pos;
+}
+InlineHostDevice int indexNOSD_neg(const int id, const int mu, const int lmu, const int nu, const int lnu){
+	int x[3];
+	indexNOSD(id, x);
+	x[mu] = (x[mu]+lmu+Grid(mu)) % Grid(mu);
+	x[nu] = (x[nu]+lnu+Grid(nu)) % Grid(nu);	
+	int pos = indexIdS(x);
+	return pos;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+InlineHostDevice void indexEO(const int id, const int parity, int x[4]){
 	int za = (id / (Grid(0)/2));
 	int zb =  (za / Grid(1));
 	x[1] = za - zb * Grid(1);
@@ -31,48 +121,37 @@ InlineHostDevice void indexEO(int id, int parity, int x[4]){
 	x[0] = (2 * id + xodd )  - za * Grid(0);
  }
 
-InlineHostDevice int indexId(int x[4]){
- return  ((((x[3] * Grid(2) + x[2]) * Grid(1)) + x[1] ) * Grid(0) + x[0]);
-}
-InlineHostDevice int indexId(int x[4], int parity, int dir){
-	int id = ((((x[3] * Grid(2) + x[2]) * Grid(1)) + x[1] ) * Grid(0) + x[0]) >> 1;
+InlineHostDevice int indexId(const int x[4], const int parity, const int dir){
+	int id = indexId(x) >> 1;
  return id + parity * HalfVolume() + Volume() * dir;
 }
-InlineHostDevice int indexId(int x[4], int dir){
-	int id = ((((x[3] * Grid(2) + x[2]) * Grid(1)) + x[1] ) * Grid(0) + x[0]) >> 1;
-	int parity = (x[0] + x[1] + x[2] +x[3]) & 1;
+InlineHostDevice int indexId(const int x[4], const int dir){
+	int id = indexId(x) >> 1;
+	int parity = GetParity(x);
  return id + parity * HalfVolume() + Volume() * dir;
 }
 
-InlineHostDevice int indexEO_neg(const int id, int parity, int mu, int lmu){
+InlineHostDevice int indexEO_neg(const int id, const int parity, const int mu, const int lmu){
 	int x[4];
 	indexEO(id, parity, x);
-	x[mu] = (x[mu]+lmu+Grid(mu)) % Grid(mu);
-	
-	int pos = ((((x[3] * Grid(2) + x[2]) * Grid(1)) + x[1] ) * Grid(0) + x[0]) >> 1;
-	int oddbit = (x[0] + x[1] + x[2] +x[3]) & 1;
+	x[mu] = (x[mu]+lmu+Grid(mu)) % Grid(mu);	
+	int pos = indexId(x) >> 1;
+	int oddbit = GetParity(x);
 	pos += oddbit  * HalfVolume();
 	return pos;
 }
-InlineHostDevice int indexEO_neg(const int id, int parity, int mu, int lmu, int nu, int lnu){
+InlineHostDevice int indexEO_neg(const int id, const int parity, const int mu, const int lmu, const int nu, const int lnu){
 	int x[4];
 	indexEO(id, parity, x);
 	x[mu] = (x[mu]+lmu+Grid(mu)) % Grid(mu);
 	x[nu] = (x[nu]+lnu+Grid(nu)) % Grid(nu);
 
-	int pos = ((((x[3] * Grid(2) + x[2]) * Grid(1)) + x[1] ) * Grid(0) + x[0]) >> 1;
-	int oddbit = (x[0] + x[1] + x[2] +x[3]) & 1;
+	int pos = indexId(x) >> 1;
+	int oddbit = GetParity(x);
 	pos += oddbit  * HalfVolume();
 	return pos;
 }
 
-
-InlineHostDevice int Index_4D_Neig_EO(const int x[], const int dx[], const int X[4]) {
-	int y[4];
-	for (int i=0; i<4; i++) y[i] = (x[i] + dx[i] + X[i]) % X[i];
-	int idx = (((y[3]*X[2] + y[2])*X[1] + y[1])*X[0] + y[0]) >> 1;
-	return idx;
-}
 
 }
 #endif

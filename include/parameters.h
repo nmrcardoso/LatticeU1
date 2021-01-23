@@ -12,6 +12,7 @@
 
 namespace U1{
 
+void SetupLatticeParameters(int Nx, int Ny, int Nz, int Nt, int dirs, double beta, double aniso, int imetrop, int ovrn);
 
 
 #if defined(XORWOW)
@@ -57,6 +58,7 @@ namespace DEVPARAMS{
 	extern ConstDeviceMem   int half_volume;
 	extern ConstDeviceMem   int spatial_volume;
 	extern ConstDeviceMem   int Grid[4];
+	extern ConstDeviceMem   int Offset[4];
 }
 
 namespace PARAMS{
@@ -68,6 +70,7 @@ namespace PARAMS{
 	extern int half_volume;
 	extern int spatial_volume;
 	extern int Grid[4];
+	extern int Offset[4];
 	extern int iter;
 	extern double accept_ratio;
 	extern int ovrn;
@@ -104,6 +107,15 @@ InlineHostDevice int Grid(int dim){
     return PARAMS::Grid[dim];
     #endif
 }
+
+InlineHostDevice int Offset(int dim){
+    #ifdef __CUDA_ARCH__
+    return DEVPARAMS::Offset[dim];
+    #else
+    return PARAMS::Offset[dim];
+    #endif
+}
+
 InlineHostDevice double Beta(){
     #ifdef __CUDA_ARCH__
     return DEVPARAMS::Beta;
@@ -132,6 +144,7 @@ InlineHostDevice double Aniso(){
     return PARAMS::Aniso;
     #endif
 }
+
 
 
 	

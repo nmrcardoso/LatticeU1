@@ -76,5 +76,82 @@ InlineHostDevice void staple(const double *lat, const int id, const int parity, 
 	stapleIm = stapleImSS / Aniso() + stapleImST * Aniso();	
 }
 
+InlineHostDevice complexd Staple(const double *lat, const int id, const int parity, const int mu){
+
+	complexd stapleSS = 0.0;
+	complexd stapleST = 0.0;
+	
+	int idmu1 = indexEO_neg(id, parity, mu, 1);			
+	for(int nu = 0; nu < Dirs(); nu++)  if(mu != nu) {
+		double upperStaple = lat[idmu1 + Volume() * nu];
+		upperStaple -= lat[indexEO_neg(id, parity, nu, 1) + Volume() * mu];
+		upperStaple -= lat[id + parity * HalfVolume() + nu * Volume()];
+		
+		double lowerStaple = -lat[indexEO_neg(id, parity, mu, 1, nu, -1) + Volume() * nu];	
+		lowerStaple -= lat[indexEO_neg(id, parity, nu, -1) + Volume() * mu];	
+		lowerStaple += lat[indexEO_neg(id, parity, nu, -1) + Volume() * nu];	
+		
+		if( mu == TDir() || nu == TDir() ){
+			stapleST += exp_ir(upperStaple) + exp_ir(lowerStaple);		
+		}
+		else{
+			stapleSS += exp_ir(upperStaple) + exp_ir(lowerStaple);		
+		}
+	}
+	return stapleSS / Aniso() + stapleST * Aniso();
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+InlineHostDevice void Staple(const double *lat, const int id, const int parity, const int mu, complexd &stapleSS, complexd &stapleST){
+	
+	stapleSS = 0.0;
+	stapleST = 0.0;
+	
+	int idmu1 = indexEO_neg(id, parity, mu, 1);			
+	for(int nu = 0; nu < Dirs(); nu++)  if(mu != nu) {
+		double upperStaple = lat[idmu1 + Volume() * nu];
+		upperStaple -= lat[indexEO_neg(id, parity, nu, 1) + Volume() * mu];
+		upperStaple -= lat[id + parity * HalfVolume() + nu * Volume()];
+		
+		double lowerStaple = -lat[indexEO_neg(id, parity, mu, 1, nu, -1) + Volume() * nu];	
+		lowerStaple -= lat[indexEO_neg(id, parity, nu, -1) + Volume() * mu];	
+		lowerStaple += lat[indexEO_neg(id, parity, nu, -1) + Volume() * nu];	
+		
+		if( mu == TDir() || nu == TDir() ){
+			stapleST += exp_ir(upperStaple) + exp_ir(lowerStaple);		
+		}
+		else{
+			stapleSS += exp_ir(upperStaple) + exp_ir(lowerStaple);		
+		}
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
 }
 #endif

@@ -84,6 +84,7 @@ namespace DEVPARAMS{
 	ConstDeviceMem   int half_volume;
 	ConstDeviceMem   int spatial_volume;
 	ConstDeviceMem   int Grid[4];
+	ConstDeviceMem   int Offset[4];
 }
 
 namespace PARAMS{
@@ -95,12 +96,29 @@ namespace PARAMS{
 	int half_volume;
 	int spatial_volume;
 	int Grid[4];
+	int Offset[4];
 	int iter = 0;
 	double accept_ratio = 0.;
 	int ovrn = 3;
 	int metrop = 1;
     cudaDeviceProp deviceProp;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #define memcpyToSymbol(dev, host, type)                                 \
     cudaSafeCall(cudaMemcpyToSymbol(dev,  &host,  sizeof(type), 0, cudaMemcpyHostToDevice ));
@@ -117,8 +135,78 @@ void SetupGPU_Parameters(){
 	memcpyToSymbol(DEVPARAMS::DIRS, PARAMS::DIRS, int);
 	memcpyToSymbol(DEVPARAMS::TDir, PARAMS::TDir, int);
 	memcpyToArraySymbol(DEVPARAMS::Grid, PARAMS::Grid, int, 4); 
+	memcpyToArraySymbol(DEVPARAMS::Offset, PARAMS::Offset, int, 4); 
 	memcpyToSymbol(DEVPARAMS::Aniso, PARAMS::Aniso, double); 
 }
+
+
+
+
+
+void SetupLatticeParameters(int Nx, int Ny, int Nz, int Nt, int dirs, double beta, double aniso, int imetrop, int ovrn){
+	using namespace std;
+	PARAMS::DIRS = dirs; //Need to update kernels to take into account less than 4 directions
+	PARAMS::TDir = PARAMS::DIRS - 1;
+
+	for(int i = 0; i < 4; ++i) { 
+		PARAMS::Grid[i] = 1; 
+		PARAMS::Offset[i] = 0;
+	}
+	PARAMS::Grid[0] = Nx;
+	if(Dirs()==2) PARAMS::Grid[1] = Nt;
+	else if(Dirs() > 2) PARAMS::Grid[1] = Ny;
+	if(Dirs()==3) PARAMS::Grid[2] = Nt;
+	else if(Dirs() > 3) PARAMS::Grid[2] = Nz;
+	if(Dirs()==4) PARAMS::Grid[3] = Nt;
+	
+	
+	for(int i = 1; i < PARAMS::DIRS; ++i){
+		if( (Grid(i)%2) != 0 ){
+			std::cout << "Error: Number of points should be an even number..." << std::endl;
+			Finalize(1);
+		}
+	}
+	
+	PARAMS::Offset[0] = 1;
+	for(int i = 1; i < PARAMS::DIRS; ++i) { 
+		PARAMS::Offset[i] = PARAMS::Grid[i-1]*PARAMS::Offset[i-1];
+	}
+	//for(int i = 0; i < 4; ++i) std::cout << i << '\t' << PARAMS::Offset[i] << std::endl;
+	PARAMS::volume = 1;
+	for(int i = 0; i < 4; ++i) PARAMS::volume *= Grid(i);	
+	PARAMS::half_volume = Volume() / 2;
+	PARAMS::spatial_volume = 1;
+	for(int i = 0; i < TDir(); ++i) PARAMS::spatial_volume *= Grid(i);
+	
+	
+	PARAMS::Beta = beta;
+	PARAMS::Aniso = aniso;
+	PARAMS::metrop = imetrop;
+	PARAMS::ovrn = ovrn;
+	
+	
+	
+	
+	cout << "==========================================" << endl;
+	cout << "Lattice properties:" << endl;
+	cout << "------------------------------------------" << endl;
+	cout << "    Volume: ";
+	for(int i = 0; i < Dirs(); i++){ cout << Grid(i); if(i < Dirs()-1) cout << "x"; }
+	cout << endl;
+	cout << "    Number of directions: " << Dirs() << endl;
+	cout << "    Time indice: " << TDir() << endl;
+	cout << "    Beta: " << Beta() << endl;
+	cout << "    Anisotropy: " << Aniso() << endl;
+	cout << "    Metropolis updates: " << PARAMS::metrop << endl;
+	cout << "    Overrelaxation updates: " << PARAMS::ovrn << endl;
+	
+	
+	
+	cout << "==========================================" << endl;
+	cout << "Setting up Device parameters..." << endl;	
+	SetupGPU_Parameters(); // Copy parameters to GPU constant memory, need to be setup before any kernel call
+}
+
 
 
 

@@ -22,6 +22,7 @@
 #include "array.h"
 #include "actime.h"
 
+
 using namespace std;
 using namespace U1;
 
@@ -42,77 +43,31 @@ int main(){
 	int gpuID = 0;
 	Start(gpuID, VERBOSE, TUNE_YES); // Important. Setup GPU id and setup tune kernels and verbosity level. See cuda_error_check.cpp/.h
 	
-	
-	int numthreads = 0;
-	#pragma omp parallel
-	numthreads = omp_get_num_threads();
-	cout << "Number of threads: " << numthreads << endl;
-	
-	//create one RNG per thread
-	generator = new std::mt19937[numthreads];
-	for(int i = 0; i < numthreads; ++i) generator[i].seed(time(NULL)*(i+1));
-	
-	
-	
-	
-	PARAMS::DIRS = 4;
-	PARAMS::TDir = PARAMS::DIRS - 1;
+	int dirs = 4; //Need to update kernels to take into account less than 4 directions
 	int ls = 24; //The number of points in each direction must be an even number!!!!!!!!!
 	int Nx=ls;
 	int Ny=ls;
 	int Nz=ls;
 	int Nt=12;
-	for(int i = 0; i < 4; ++i) PARAMS::Grid[i] = 1;
-	PARAMS::Grid[0] = Nx;
-	if(Dirs()==2) PARAMS::Grid[1] = Nt;
-	else if(Dirs() > 2) PARAMS::Grid[1] = Ny;
-	if(Dirs()==3) PARAMS::Grid[2] = Nt;
-	else if(Dirs() > 3) PARAMS::Grid[2] = Nz;
-	if(Dirs()==4) PARAMS::Grid[3] = Nt;
-	PARAMS::volume = 1;
-	for(int i = 0; i < 4; ++i) PARAMS::volume *= Grid(i);	
-	PARAMS::half_volume = Volume() / 2;
-	PARAMS::spatial_volume = 1;
-	for(int i = 0; i < TDir(); ++i) PARAMS::spatial_volume *= Grid(i);
+	double beta = 1.;
+	double aniso = 1.;
+	int imetrop = 1;
+	int ovrn = 3;
 	
-	int maxIter = 1020;
+	//Setup global parameters in Host and Device
+	SetupLatticeParameters(Nx, Ny, Nz, Nt, dirs, beta, aniso, imetrop, ovrn);
+	
+	int maxIter = 1000;
 	int printiter = 100;
-	PARAMS::Beta = 1.;
-	PARAMS::Aniso = 1.;
 	bool hotstart = false;
-	PARAMS::metrop = 1;
-	PARAMS::ovrn = 3;
-	
-	
-	
-	int numplaqs = 6; //DIRS=4 3D+1
-	if(Dirs()==2) numplaqs = 1.;
-	else if(Dirs()==3) numplaqs = 3.;
-	double norm = 1. / double(Volume() * numplaqs);
-	
-	//cout << "#####:::::: " << GetLatticeName() << endl;
-	//return;
 	
 	//GPU Code
 	Timer t0;
 	t0.start();
 	
-	SetupGPU_Parameters(); // Copy parameters to GPU constant memory, need to be setup before any kernel call
-	            
-
-	//Array array to store the phases
-	Array<double> *lattice = new Array<double>(Device, Volume()*Dirs()); //also initialize aray to 0
-	//Initialize cuda rng
-	int seed = 1234;
-	CudaRNG *rng = new CudaRNG(seed, HalfVolume());
-	if(hotstart){
-		HotStart(lattice, rng);
-	}
-	cout << "Iter: " << PARAMS::iter << " \t";
-	complexd plaqv = Plaquette(lattice);
-	complexd ployv = Polyakov(lattice);
 	
-	
+	//cout << "#####:::::: " << GetLatticeName() << endl;
+      
 	string filename = GetLatticeName() + ".dat";
 	
     ofstream fileout;
@@ -135,32 +90,46 @@ int main(){
 	cout << "Creating file: " << filename1 << endl;
     fileout1.precision(12);
     
-    fileout << PARAMS::iter << '\t' << plaqv.real() << '\t' << plaqv.imag() << endl;
     
+    
+    
+    
+
+	//Array array to store the phases
+	Array<double> *lattice = new Array<double>(Device, Volume()*Dirs()); //also initialize aray to 0
+	//Initialize cuda rng
+	int seed = 1234;
+	CudaRNG *rng = new CudaRNG(seed, HalfVolume());
+	if(hotstart){
+		HotStart(lattice, rng);
+	}
+	cout << "Iter: " << PARAMS::iter << " \t";
+	complexd *plaqv = new complexd[2];
+	Plaquette(lattice, plaqv, false);
+	complexd ployv = Polyakov(lattice);
+	cout << PARAMS::iter << '\t' << plaqv[0] << '\t' << plaqv[1] << endl;
+	cout << "L: " << ployv.real() << '\t' << ployv.imag() << "\t|L|: " << ployv.abs() << endl;
+    fileout << PARAMS::iter << '\t' << plaqv[0] << '\t' << plaqv[1] << endl;
+	fileout1 << PARAMS::iter << '\t' << ployv.real() << '\t' << ployv.imag() << "\t|L|: " << ployv.abs() << endl;
+  
+      
     vector<double> plaq_corr;
-	int mininter = 600;
+	int mininter = 700;
 	for(PARAMS::iter = 1; PARAMS::iter <= maxIter; ++PARAMS::iter){
 		// metropolis and overrelaxation algorithm 
 		UpdateLattice(lattice, rng,  PARAMS::metrop, PARAMS::ovrn);
 		
-		if(0)
-		if(PARAMS::iter >= mininter){
-			plaqv = Plaquette(lattice, false);
-			plaq_corr.push_back(plaqv.real());
-				
-			int nsweep = 0;
-			//calculateCorTime(mininter+100, PARAMS::iter, plaq_corr, nsweep);
-			calculateCorTime(50, PARAMS::iter, plaq_corr, nsweep);
-		}
-		
 		if((PARAMS::iter%printiter)==0){
-			cout << "Iter: " << PARAMS::iter << " \t";
-			plaqv = Plaquette(lattice);
+			Plaquette(lattice, plaqv);
+			cout << PARAMS::iter << '\t' << plaqv[0] << '\t' << plaqv[1] << endl;
+			fileout << PARAMS::iter << '\t' << plaqv[0] << '\t' << plaqv[1] << endl;
 			ployv = Polyakov(lattice);
-			fileout << PARAMS::iter << '\t' << plaqv.real() << '\t' << plaqv.imag() << endl;
-			fileout1 << PARAMS::iter << '\t' << ployv.real() << '\t' << ployv.imag() << '\t' << ployv.abs() << endl;			
+			cout << "L: " << ployv.real() << '\t' << ployv.imag() << "\t|L|: " << ployv.abs() << endl;
+			fileout1 << PARAMS::iter << '\t' << ployv.real() << '\t' << ployv.imag() << "\t|L|: " << ployv.abs() << endl;
 		}
-		if( PARAMS::iter > 990 && (PARAMS::iter%printiter)==0){
+
+
+		if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
 			cout << "################################" << endl;
 			Timer p0, p1, p2, p3;
 			cout << "########### P(0)*conj(P(r)) #####################" << endl;
@@ -177,21 +146,30 @@ int main(){
 			std::cout << "p1: " << p1.getElapsedTime() << " s" << endl;			
 			cout << "########### P(0)*conj(P(r)) Using MultiLevel #####################" << endl;
 			p2.start();
-			//MultiLevel(lattice, rng, 50, 10, 50, 10, 2, 5);
-			//MultiLevel(lattice, rng, 1, 1, 1, 1, 1, 3);
-			//Array<complexd>* results = MultiLevel(lattice, rng, 1, 0, 1, 0, 1, 3);
-			Array<complexd>* results = MultiLevel(lattice, rng, 10, 16, 25, 5, 2, 5);
+			Array<complexd>* results = MultiLevel(lattice, rng, 10, 1, 20, 1, 2, 5);
 			delete results;
 			p2.stop();
 			std::cout << "p2: " << p2.getElapsedTime() << " s" << endl;
-			cout << "################################" << endl;			
-		}			
+			cout << "################################" << endl;		
+		}
+
+
+		if(0) if(PARAMS::iter >= mininter){
+			Plaquette(lattice, plaqv, false);
+			plaq_corr.push_back( (plaqv[0].real()+plaqv[1].real())*0.5);
+				
+			int nsweep = 0;
+			//calculateCorTime(mininter+100, PARAMS::iter, plaq_corr, nsweep);
+			calculateCorTime(5, PARAMS::iter, plaq_corr, nsweep);
+			calculateCorTime1(5, PARAMS::iter, plaq_corr, nsweep);
+		}
 	}
 	fileout.close();
 	fileout1.close();
 	
 	delete lattice;
 	delete rng;
+	delete[] plaqv;
 	t0.stop();
 	std::cout << "Time: " << t0.getElapsedTime() << " s" << endl;
 	
@@ -201,6 +179,19 @@ int main(){
 	//CPU CODE
 	Timer t1;
 	t1.start();
+	
+	
+	
+	int numthreads = 0;
+	#pragma omp parallel
+	numthreads = omp_get_num_threads();
+	cout << "Number of threads: " << numthreads << endl;
+	
+	//create one RNG per thread
+	generator = new std::mt19937[numthreads];
+	for(int i = 0; i < numthreads; ++i) generator[i].seed(time(NULL)*(i+1));
+	
+	
 	// creates the lattice array and initializes it to 0, cold start
 	double *lat = new double[Volume()*Dirs()](); 
 	

@@ -11,6 +11,11 @@
 
 namespace U1{
 
+
+
+
+
+
 template<class Real>
 class Array{	
 	public:
@@ -178,6 +183,7 @@ class Array{
 
 
 
+Array<double>* LatticeConvert(Array<double>* lat, bool eo_to_no);
 
 
 

@@ -7,7 +7,6 @@
 #include <omp.h>
 
 #include <cuda.h>
-#include <curand_kernel.h>
 
 #include "timer.h"
 #include "cuda_error_check.h"
@@ -18,15 +17,13 @@
 
 #include "parameters.h"
 #include "index.h"
+#include "array.h"
 
 
-#include "random.h"
 #include "staple.h"
-#include "update.h"
-#include "plaquette.h"
 
-#include "multilevel.h"
 #include "tune.h"
+#include "lattice_functions.h"
 
 using namespace std;
 
@@ -131,10 +128,10 @@ public:
 	apply(stream);
 	cudaSafeCall(cudaMemcpy(&poly, dev_poly, sizeof(complexd), cudaMemcpyDeviceToHost));
 	poly *= norm;
-    CUDA_SAFE_DEVICE_SYNC();
-    CUT_CHECK_ERROR("Kernel execution failed");
+    cudaDevSync();
+    cudaCheckError("Kernel execution failed");
 #ifdef TIMMINGS
-	CUDA_SAFE_DEVICE_SYNC( );
+	cudaDevSync( );
     time.stop();
     timesec = time.getElapsedTimeInSec();
 #endif
@@ -169,10 +166,10 @@ public:
 
 
 
-complexd Polyakov(Array<double> *dev_lat){
+complexd Polyakov(Array<double> *dev_lat, bool print){
 	CalcPolyakov pl(dev_lat);
 	complexd poly = pl.Run();
-	cout << "\t\t" << "L: " << poly.real() << '\t' << poly.imag() << "\t|L|: " << poly.abs() << endl;
+	if(print) cout << "L: " << poly.real() << '\t' << poly.imag() << "\t|L|: " << poly.abs() << endl;
 	return poly;
 } 
 
@@ -183,20 +180,6 @@ complexd Polyakov(Array<double> *dev_lat){
 
 __global__ void kernel_polyakov_volume(double *lat, double *poly){
     size_t id = threadIdx.x + blockDim.x * blockIdx.x;
-    
-	/*if( id >= SpatialVolume()/2 ) return;
-	for(int parity = 0; parity < 2; ++parity){		
-		int x[4];
-		indexEO(id, parity, x);
-		
-		double tmp = 0.;
-		for(x[TDir()] = 0; x[TDir()] < Grid(TDir()); ++x[TDir()]){
-			//if(id==0&&parity==0) printf("---->%d\n",x[TDir()]);
-			tmp += lat[ indexId(x, TDir()) ];
-		}
-		poly[((x[2] * Grid(1)) + x[1] ) * Grid(0) + x[0]] = tmp;
-	}
-	*/
 	if( id >= SpatialVolume() ) return;
 	int parity = 0;
 	if( id >= SpatialVolume()/2 ){
@@ -208,10 +191,9 @@ __global__ void kernel_polyakov_volume(double *lat, double *poly){
 	
 	double tmp = 0.;
 	for(x[TDir()] = 0; x[TDir()] < Grid(TDir()); ++x[TDir()]){
-		//if(id==0&&parity==0) printf("---->%d\n",x[TDir()]);
 		tmp += lat[ indexId(x, TDir()) ];
 	}
-	poly[((x[2] * Grid(1)) + x[1] ) * Grid(0) + x[0]] = tmp;
+	poly[indexIdS(x)] = tmp;
 
 }
 
@@ -222,14 +204,14 @@ __global__ void kernel_poly2(double *poly, complexd *poly2, int radius){
 	double pl0 = 0.;
 	if(id < SpatialVolume()) pl0 = poly[id];			
 	int x[3];
-	indexNO3D(id, x);
+	indexNOSD(id, x);
 	for(int r = 1; r <= radius; ++r){	
 		complexd pl = 0.;
 		if(id < SpatialVolume()){
 			for(int dir = 0; dir < TDir(); dir++){
 				int xold = x[dir];
 				x[dir] = (x[dir] + r) % Grid(dir);
-				double pl1 = poly[((x[2] * Grid(1)) + x[1] ) * Grid(0) + x[0]];
+				double pl1 = poly[indexIdS(x)];
 				pl1 = pl0-pl1;
 				pl.real() += cos(pl1);
 				pl.imag() += sin(pl1);	
@@ -248,14 +230,14 @@ __global__ void kernel_poly21(double *poly, complexd *poly2, int radius){
 	complexd pl0 = 0.;
 	if(id < SpatialVolume()) pl0 = exp_ir(poly[id]);			
 	int x[3];
-	indexNO3D(id, x);
+	indexNOSD(id, x);
 	for(int r = 1; r <= radius; ++r){	
 		complexd pl = 0.;
 		if(id < SpatialVolume()){
 			for(int dir = 0; dir < TDir(); dir++){
 				int xold = x[dir];
 				x[dir] = (x[dir] + r) % Grid(dir);
-				double pl1 = poly[((x[2] * Grid(1)) + x[1] ) * Grid(0) + x[0]];
+				double pl1 = poly[indexIdS(x)];
 				//pl1 = pl0-pl1;
 				//pl.real() += cos(pl1);
 				//pl.imag() += sin(pl1);	
@@ -335,23 +317,11 @@ __global__ void kernel_polyakov_volume_mhit(double *lat, complexd *poly){
 	
 	complexd res = 1.;
 	for(x[TDir()] = 0; x[TDir()] < Grid(TDir()); ++x[TDir()]){
-		double W_re, W_im;
-		
-		int pos = ((((x[3] * Grid(2) + x[2]) * Grid(1)) + x[1] ) * Grid(0) + x[0]) >> 1;
-		int oddbit = (x[0] + x[1] + x[2] + x[3]) & 1;
-
-		staple(lat, pos, oddbit, TDir(), W_re, W_im);				
-		
-		double alpha = sqrt(W_re*W_re+W_im*W_im);
-	
-		double ba = Beta() * alpha;
-		double temp = cyl_bessel_i1(ba)/(cyl_bessel_i0(ba)*alpha);
-		//double temp = besseli1(ba)/(besseli0(ba)*alpha);
-		complexd val(temp*W_re, -temp*W_im);
-		
-		res *= val;
+		int pos = indexId(x) >> 1;
+		int oddbit = GetParity(x);
+		res *= MultiHit(lat, pos, oddbit, TDir());
 	}
-	poly[((x[2] * Grid(1)) + x[1] ) * Grid(0) + x[0]] = res;
+	poly[indexIdS(x)] = res;
 
 }
 
@@ -361,14 +331,14 @@ __global__ void kernel_poly2_mhit(complexd *poly, complexd *poly2, int radius){
 	complexd pl0 = 0.;
 	if(id < SpatialVolume()) pl0 = poly[id];			
 	int x[3];
-	indexNO3D(id, x);
+	indexNOSD(id, x);
 	for(int r = 1; r <= radius; ++r){	
 		complexd pl = 0.;
 		if(id < SpatialVolume()){
 			for(int dir = 0; dir < TDir(); dir++){
 				int xold = x[dir];
 				x[dir] = (x[dir] + r) % Grid(dir);
-				complexd pl1 = poly[((x[2] * Grid(1)) + x[1] ) * Grid(0) + x[0]];
+				complexd pl1 = poly[indexIdS(x)];
 				pl += pl0 * conj(pl1);				
 				x[dir] = xold;
 			}
@@ -457,23 +427,16 @@ __global__ void kernel_polyakov_volume(double *lat, complexd *poly){
 	
 	complexd res = 1.;
 	for(x[TDir()] = 0; x[TDir()] < Grid(TDir()); ++x[TDir()]){	
-		if(multihit){
-			double W_re, W_im;				
-			int pos = ((((x[3] * Grid(2) + x[2]) * Grid(1)) + x[1] ) * Grid(0) + x[0]) >> 1;
-			int oddbit = (x[0] + x[1] + x[2] + x[3]) & 1;
-			staple(lat, pos, oddbit, TDir(), W_re, W_im);			
-			double alpha = sqrt(W_re*W_re+W_im*W_im);
-			double ba = Beta() * alpha;
-			double temp = cyl_bessel_i1(ba)/(cyl_bessel_i0(ba)*alpha);
-			//double temp = besseli1(ba)/(besseli0(ba)*alpha);
-			complexd val(temp*W_re, -temp*W_im);
-			res *= val;
+		if(multihit){		
+			int pos = indexId(x) >> 1;
+			int oddbit = GetParity(x);
+			res *= MultiHit(lat, pos, oddbit, TDir());
 		}
 		else{
 			res *= exp_ir(lat[ indexId(x, TDir()) ]);
 		}
 	}
-	poly[((x[2] * Grid(1)) + x[1] ) * Grid(0) + x[0]] = res;
+	poly[indexIdS(x)] = res;
 }
 
 template< bool multihit>
@@ -508,10 +471,10 @@ public:
     time.start();
 #endif
 	apply(stream);
-    CUDA_SAFE_DEVICE_SYNC();
-    CUT_CHECK_ERROR("Kernel execution failed");
+    cudaDevSync();
+    cudaCheckError("Kernel execution failed");
 #ifdef TIMMINGS
-	CUDA_SAFE_DEVICE_SYNC( );
+	cudaDevSync( );
     time.stop();
     timesec = time.getElapsedTimeInSec();
 #endif
@@ -554,14 +517,14 @@ __global__ void kernel_PP(complexd *poly, complexd *res, int radius){
 	complexd pl0 = 0.;
 	if(id < SpatialVolume()) pl0 = poly[id];			
 	int x[3];
-	indexNO3D(id, x);
+	indexNOSD(id, x);
 	for(int r = 1; r <= radius; ++r){	
 		complexd pl = 0.;
 		if(id < SpatialVolume()){
 			for(int dir = 0; dir < TDir(); dir++){
 				int xold = x[dir];
 				x[dir] = (x[dir] + r) % Grid(dir);
-				complexd pl1 = poly[((x[2] * Grid(1)) + x[1] ) * Grid(0) + x[0]];
+				complexd pl1 = poly[indexIdS(x)];
 				pl += pl0 * conj(pl1);				
 				x[dir] = xold;
 			}
@@ -613,10 +576,10 @@ public:
 	apply(stream);
 	poly->Copy(dev_poly);
 	for(int i = 0; i < radius; ++i) poly->getPtr()[i] *= norm;
-    CUDA_SAFE_DEVICE_SYNC();
-    CUT_CHECK_ERROR("Kernel execution failed");
+    cudaDevSync();
+    cudaCheckError("Kernel execution failed");
 #ifdef TIMMINGS
-	CUDA_SAFE_DEVICE_SYNC( );
+	cudaDevSync( );
     time.stop();
     timesec = time.getElapsedTimeInSec();
 #endif

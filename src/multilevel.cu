@@ -24,6 +24,8 @@
 #include "tune.h"
 
 #include "array.h"
+#include "multilevel.h"
+#include "lattice_functions.h"
 
 using namespace std;
 
@@ -38,24 +40,13 @@ __global__ void kernel_metropolis_multilevel(double *lat, int parity, int mu, cu
 	indexEO(id, parity, x);
 	if((x[TDir()]%multilevel) || mu==3){	
 		cuRNGState localState = rng_state[ id ];
-
-		double phase_old = lat[id + parity * HalfVolume() + mu * Volume()];
-		int idmu1 = indexEO_neg(id, parity, mu, 1);
-		double stapleRe = 0., stapleIm = 0.;
-		staple(lat, id, parity, mu, stapleRe, stapleIm);			
-		double r = sqrt( stapleRe*stapleRe + stapleIm*stapleIm );
-		double t2 = atan2(stapleIm, stapleRe);
-
 		double new_phase = Random<double>(localState) * 2. * M_PI;
 		double b = Random<double>(localState);
-
-		double S1 = cos(phase_old + t2);
-		double S2 = cos(new_phase + t2);
-		double dS = exp(Beta()*r*(S2-S1));
+		rng_state[ id ] = localState;
+    	double dS = MetropolisFunc(lat, id, parity, mu, new_phase);
 		if(dS > b){
 			lat[id + parity * HalfVolume() + mu * Volume()] = new_phase;
 		}	
-		rng_state[ id ] = localState;
 	}
 }
 
@@ -98,10 +89,10 @@ public:
 	for(parity = 0; parity < 2; ++parity)
 	for(mu = 0; mu < Dirs(); ++mu)
 	    apply(stream);
-    CUDA_SAFE_DEVICE_SYNC();
-    CUT_CHECK_ERROR("Kernel execution failed");
+    cudaDevSync();
+    cudaCheckError("Kernel execution failed");
 #ifdef TIMMINGS
-	CUDA_SAFE_DEVICE_SYNC( );
+	cudaDevSync( );
     time.stop();
     timesec = time.getElapsedTimeInSec();
 #endif
@@ -147,14 +138,8 @@ __global__ void kernel_overrelaxation_multilevel(double *lat, int parity, int mu
     
 	int x[4];
 	indexEO(id, parity, x);
-	if((x[TDir()]%multilevel) || mu==3){
-		double stapleRe = 0., stapleIm = 0.;
-		staple(lat, id, parity, mu, stapleRe, stapleIm);
-		int pos = id + parity * HalfVolume() + mu * Volume();
-		double phase_old = lat[pos];
-		double t2 = atan2(stapleIm, stapleRe);
-		double new_phase = fmod(6.* M_PI - phase_old - 2. * t2, 2.* M_PI);
-		lat[pos] = new_phase;
+	if((x[TDir()]%multilevel) || mu==3){		
+		lat[id + parity * HalfVolume() + mu * Volume()] = OvrFunc(lat, id, parity, mu);
 	}
 }
 
@@ -197,10 +182,10 @@ public:
 		//cout << multilevel << '\t' << mu << '\t' << parity << '\t' << m << endl;
 	    apply(stream);
     }
-    CUDA_SAFE_DEVICE_SYNC();
-    CUT_CHECK_ERROR("Kernel execution failed");
+    cudaDevSync();
+    cudaCheckError("Kernel execution failed");
 #ifdef TIMMINGS
-	CUDA_SAFE_DEVICE_SYNC( );
+	cudaDevSync( );
     time.stop();
     timesec = time.getElapsedTimeInSec();
 #endif
@@ -262,20 +247,13 @@ __global__ void kernel_l2_multilevel_0(double *lat, complexd *poly){
 	}	
 	int x[4];
 	indexEO(id, parity, x);
-	int id3d = ((((x[3] * Grid(2) + x[2]) * Grid(1)) + x[1] ) * Grid(0) + x[0]);
+	int id4d = indexId(x);
 	
-	if(multihit){
-		double W_re, W_im;	
-		staple(lat, id, parity, TDir(), W_re, W_im);			
-		double alpha = sqrt(W_re*W_re+W_im*W_im);
-		double ba = Beta() * alpha;
-		double temp = cyl_bessel_i1(ba)/(cyl_bessel_i0(ba)*alpha);
-		//double temp = besseli1(ba)/(besseli0(ba)*alpha);
-		complexd val(temp*W_re, -temp*W_im);
-		poly[id3d] = val;
+	if(multihit){	
+		poly[id4d] = MultiHit(lat, id, parity, TDir());
 	}
 	else{
-		poly[id3d] = exp_ir(lat[ indexId(x, TDir()) ]);
+		poly[id4d] = exp_ir(lat[ indexId(x, TDir()) ]);
 	}
 }
 
@@ -312,10 +290,10 @@ public:
     time.start();
 #endif
 	apply(stream);
-    CUDA_SAFE_DEVICE_SYNC();
-    CUT_CHECK_ERROR("Kernel execution failed");
+    cudaDevSync();
+    cudaCheckError("Kernel execution failed");
 #ifdef TIMMINGS
-	CUDA_SAFE_DEVICE_SYNC( );
+	cudaDevSync( );
     time.stop();
     timesec = time.getElapsedTimeInSec();
 #endif
@@ -354,7 +332,7 @@ __global__ void kernel_l2_multilevel_1(complexd *poly, complexd *l2, int radius)
     size_t id = threadIdx.x + blockDim.x * blockIdx.x;    
 	if(id >= SpatialVolume()) return;		
 	int x[3];
-	indexNO3D(id, x);
+	indexNOSD(id, x);
 	
 	int nlayers = Grid(TDir())/2;
 	for(int r = 1; r <= radius; ++r){	
@@ -364,10 +342,10 @@ __global__ void kernel_l2_multilevel_1(complexd *poly, complexd *l2, int radius)
 				complexd pl0 = 1.;
 				complexd pl1 = 1.;
 				for(x[TDir()] = t; x[TDir()] < t+2; ++x[TDir()]){
-					pl0 *= (poly[(((x[3] * Grid(2) + x[2]) * Grid(1)) + x[1] ) * Grid(0) + x[0]]);
+					pl0 *= (poly[indexId(x)]);
 					int xold = x[dir];
 					x[dir] = (x[dir] + r) % Grid(dir);
-					pl1 *= conj(poly[(((x[3] * Grid(2) + x[2]) * Grid(1)) + x[1] ) * Grid(0) + x[0]]);
+					pl1 *= conj(poly[indexId(x)]);
 									
 					x[dir] = xold;
 				}			
@@ -415,10 +393,10 @@ public:
     time.start();
 #endif
 	apply(stream);
-    CUDA_SAFE_DEVICE_SYNC();
-    CUT_CHECK_ERROR("Kernel execution failed");
+    cudaDevSync();
+    cudaCheckError("Kernel execution failed");
 #ifdef TIMMINGS
-	CUDA_SAFE_DEVICE_SYNC( );
+	cudaDevSync( );
     time.stop();
     timesec = time.getElapsedTimeInSec();
 #endif
@@ -464,7 +442,6 @@ __global__ void kernel_l2avg_l4_multilevel(complexd *dev_l2, complexd *dev_l4, i
     if(id >= size) return;			
 	
 	int nl2 = Grid(TDir())/2;
-	int nl4 = Grid(TDir())/4;	
 	int l4 = 0;
 	for(int l2 = 0; l2 < nl2; l2+=2){
 		complexd pl = 1.;
@@ -512,10 +489,10 @@ public:
     time.start();
 #endif
 	apply(stream);
-    CUDA_SAFE_DEVICE_SYNC();
-    CUT_CHECK_ERROR("Kernel execution failed");
+    cudaDevSync();
+    cudaCheckError("Kernel execution failed");
 #ifdef TIMMINGS
-	CUDA_SAFE_DEVICE_SYNC( );
+	cudaDevSync( );
     time.stop();
     timesec = time.getElapsedTimeInSec();
 #endif
@@ -552,8 +529,8 @@ public:
 };
 
 
-
-__global__ void kernel_l4avg_Final_multilevel(complexd *dev_l4, complexd *res, int radius, double norm){
+template<bool savePPspace>
+__global__ void kernel_l4avg_Final_multilevel(complexd *dev_l4, complexd *res, complexd *ppSpace, int radius, double norm){
     size_t id = threadIdx.x + blockDim.x * blockIdx.x;    				
 	
 	int nl4 = Grid(TDir())/4;	
@@ -567,6 +544,7 @@ __global__ void kernel_l4avg_Final_multilevel(complexd *dev_l4, complexd *res, i
 					pl *= dev_l4[newid] * norm;
 				}
 				pp += pl;
+				if(savePPspace) ppSpace[id + SpatialVolume() * r + SpatialVolume() * radius * dir] = pl;
 			}
 		}
 		reduce_block_1d<complexd>(res + r, pp);
@@ -574,6 +552,7 @@ __global__ void kernel_l4avg_Final_multilevel(complexd *dev_l4, complexd *res, i
 	}
 }
 
+template<bool savePPspace>
 class L4AvgPP: Tunable{
 private:
 	Array<complexd> *l4;
@@ -596,12 +575,16 @@ private:
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
 	dev_poly->Clear();
-	kernel_l4avg_Final_multilevel<<<tp.grid, tp.block, tp.shared_bytes, stream>>>(l4->getPtr(), dev_poly->getPtr(), radius, l4norm);
+	kernel_l4avg_Final_multilevel<savePPspace><<<tp.grid, tp.block, tp.shared_bytes, stream>>>(l4->getPtr(), dev_poly->getPtr(), ppSpace->getPtr(), radius, l4norm);
 }
 public:
+	Array<complexd> *ppSpace;
+	Array<complexd>* getField(){ return ppSpace; }
+	
    L4AvgPP(Array<complexd> *l4, int radius, double l4norm) : l4(l4), radius(radius), l4norm(l4norm) {
 	size = SpatialVolume();
 	dev_poly = new Array<complexd>(Device, radius);
+	if(savePPspace) ppSpace = new Array<complexd>(Device, SpatialVolume() * radius * (Dirs()-1));
 	poly = new Array<complexd>(Host, radius);
 	norm = 1. / double(SpatialVolume()*(Dirs()-1));
 	timesec = 0.0;  
@@ -614,10 +597,10 @@ public:
 	apply(stream);
 	poly->Copy(dev_poly);
 	for(int i = 0; i < radius; ++i) poly->getPtr()[i] *= norm;
-    CUDA_SAFE_DEVICE_SYNC();
-    CUT_CHECK_ERROR("Kernel execution failed");
+    cudaDevSync();
+    cudaCheckError("Kernel execution failed");
 #ifdef TIMMINGS
-	CUDA_SAFE_DEVICE_SYNC( );
+	cudaDevSync( );
     time.stop();
     timesec = time.getElapsedTimeInSec();
 #endif
@@ -684,7 +667,7 @@ Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int 
 	double l2norm = 1./double(n2);
 	L2AvgL4ML l2avgl4(l2, l4, sl4, radius, l2norm);
 	double l4norm = 1./double(n4);
-	L4AvgPP l4avgpp(l4, radius, l4norm);
+	L4AvgPP<false> l4avgpp(l4, radius, l4norm);
 
 	l4->Clear();
 	for(int i = 0; i < n4; ++i){
@@ -713,7 +696,7 @@ Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int 
 		
 		if(0){
 			double l4norm1 = 1./double(i+1);
-			L4AvgPP l4avgpp1(l4, radius, l4norm1);
+			L4AvgPP<false> l4avgpp1(l4, radius, l4norm1);
 			Array<complexd>* res = l4avgpp1.Run();
 			cout << res << endl;
 			delete res;
@@ -749,6 +732,109 @@ Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int 
 } 
 
 
+
+
+
+
+
+MultiLevelRes* MultiLevelField(Array<double> *lat, CudaRNG *rng_state, int n4, int k4, int n2, int k2, int metrop, int ovrn){
+
+	if( Grid(TDir())%4 != 0 ) {
+		cout << "Error: Cannot Apply MultiLevel Algorithm...\n Nt is not multiple of 4...\n Exiting..." << endl;
+		exit(1);
+	}
+	Array<double>* dev_lat = new Array<double>(Device);
+	dev_lat->Copy(lat);
+
+	int radius = Grid(0)/2;
+	int nl2 = Grid(TDir())/2;
+	int sl2 = nl2*(Dirs()-1)*radius*SpatialVolume();
+	Array<complexd> *l2 = new Array<complexd>(Device, sl2);
+	int nl4 = Grid(TDir())/4;
+	size_t sl4 = nl4*(Dirs()-1)*radius*SpatialVolume();
+	Array<complexd> *l4 = new Array<complexd>(Device, sl4);
+	
+	// metropolis and overrelaxation algorithm
+	Metropolis_ML<4> mtp4(dev_lat, rng_state, metrop);
+	OverRelaxation_ML<4> ovr4(dev_lat, ovrn);
+	
+	Metropolis_ML<2> mtp2(dev_lat, rng_state, metrop);
+	OverRelaxation_ML<2> ovr2(dev_lat, ovrn);
+	
+	const bool multihit = true;
+	Polyakov_Volume<multihit> mhitVol(dev_lat);
+	Array<complexd>* dev_mhit;
+	
+	double l2norm = 1./double(n2);
+	L2AvgL4ML l2avgl4(l2, l4, sl4, radius, l2norm);
+	double l4norm = 1./double(n4);
+	L4AvgPP<true> l4avgpp(l4, radius, l4norm);
+
+	l4->Clear();
+	for(int i = 0; i < n4; ++i){
+		cout << "Iter of l4: " << i << endl;
+		//Update the lattice k4 times freezing spacial links in layers with t multiple of 4
+		for(int j = 0; j < k4; ++j){
+			mtp4.Run();
+			ovr4.Run();
+		}
+		l2->Clear();
+		for(int k = 0; k < n2; ++k){		
+			//Update the lattice k2 times freezing spacial links in layers with t multiple of 2
+			for(int l = 0; l < k2; ++l){
+				mtp2.Run();
+				ovr2.Run();	
+			}
+			//Extract temporal links and apply MultiHit
+			dev_mhit = mhitVol.Run();			
+			//Calculate tensor T2
+			L2ML l2ml(dev_mhit, l2, sl2, radius);
+			l2ml.Run();
+		}
+		//Average tensor T2 and Calculate tensor T4
+		l2avgl4.Run();	
+		
+		
+		if(0){
+			double l4norm1 = 1./double(i+1);
+			L4AvgPP<false> l4avgpp1(l4, radius, l4norm1);
+			Array<complexd>* res = l4avgpp1.Run();
+			cout << res << endl;
+			delete res;
+		}
+	}
+	delete dev_lat;
+	delete dev_mhit;
+	delete l2;
+	//Average tensor T4 and Calculate P(0)*conj(P(r))
+	MultiLevelRes *res = new MultiLevelRes;	
+	res->poly = l4avgpp.Run();
+	delete l4;
+	res->ppSpace = l4avgpp.getField();
+
+	std::ofstream fileout;
+	std::string filename = "Pot_mlevel_" + GetLatticeNameI();
+	filename += "_" + ToString(n4) + "_" + ToString(k4);
+	filename += "_" + ToString(n2) + "_" + ToString(k2);
+	filename += "_" + ToString(metrop) + "_" + ToString(ovrn);
+	filename += ".dat";
+	fileout.open (filename.c_str());
+	if (!fileout.is_open()) {
+		std::cout << "Error opening file: " << filename << std::endl;
+		exit(1);
+	}
+	fileout.precision(12);
+	cout << std::scientific;
+	cout << std::setprecision(14);
+	
+	for(int r = 0; r < radius; ++r){
+		cout << r+1 << '\t' << res->poly->at(r) << endl;
+		fileout << r+1 << '\t' << res->poly->at(r) << endl;
+	}
+	
+	fileout.close();	
+	return res;
+}
 
 
 }

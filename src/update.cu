@@ -22,6 +22,7 @@
 #include "enum.h"
 
 #include "tune.h"
+#include "lattice_functions.h"
 
 
 namespace U1{
@@ -105,7 +106,7 @@ void overrelaxation(double *lat){
 
 
 
-__global__ void kernel_metropolis(double *lat, int parity, int mu, cuRNGState *rng_state){
+__global__ void kernel_metropolis_old(double *lat, int parity, int mu, cuRNGState *rng_state){
     size_t id = threadIdx.x + blockDim.x * blockIdx.x;
     if( id >= HalfVolume() ) return ;
     cuRNGState localState = rng_state[ id ];
@@ -123,6 +124,8 @@ __global__ void kernel_metropolis(double *lat, int parity, int mu, cuRNGState *r
 	double S1 = cos(phase_old + t2);
 	double S2 = cos(new_phase + t2);
 	double dS = exp(Beta()*r*(S2-S1));
+	//complexd st(stapleRe, stapleIm);
+	//if(id==0) printf("%.12e\t%.12e \n", dS, exp(Beta()*(st*exp_ir(new_phase)).real())/exp(Beta()*(st*exp_ir(phase_old)).real()));
 	if(dS > b){
 		lat[id + parity * HalfVolume() + mu * Volume()] = new_phase;
 	}	
@@ -130,7 +133,85 @@ __global__ void kernel_metropolis(double *lat, int parity, int mu, cuRNGState *r
 }
 
 
-__global__ void kernel_overrelaxation(double *lat, int parity, int mu){
+
+
+
+__global__ void kernel_metropolis_test(double *lat, int parity, int mu, cuRNGState *rng_state){
+    size_t id = threadIdx.x + blockDim.x * blockIdx.x;
+    if( id >= HalfVolume() ) return ;
+    cuRNGState localState = rng_state[ id ];
+
+	double phase_old = lat[id + parity * HalfVolume() + mu * Volume()];
+	int idmu1 = indexEO_neg(id, parity, mu, 1);
+	/*complexd staple = Staple(lat, id, parity, mu);	
+	double S1 = exp(Beta()*(1.0-staple*exp_ir(phase_old)).real());	
+	double new_phase = Random<double>(localState) * 2. * M_PI;
+	double S2 = exp(Beta()*(1.0-staple*exp_ir(new_phase)).real());
+	double dS = S2/S1;
+	double b = Random<double>(localState);*/
+	
+	
+	complexd stapleSS, stapleST;
+	Staple(lat, id, parity, mu, stapleSS, stapleST);	
+		
+	double new_phase = Random<double>(localState) * 2. * M_PI;
+	double b = Random<double>(localState);
+	
+	double SS1 = (Beta() / Aniso())*((stapleSS*exp_ir(phase_old)).real()) + (Beta() * Aniso())*( (stapleST*exp_ir(phase_old)).real());
+	double SS2 = (Beta() / Aniso())*( (stapleSS*exp_ir(new_phase)).real()) + (Beta() * Aniso())*( (stapleST*exp_ir(new_phase)).real());
+
+	double S1 = exp(SS1);
+	double S2 = exp(SS2);
+	double dS = S2/S1;
+	if(dS > b){
+		lat[id + parity * HalfVolume() + mu * Volume()] = new_phase;
+	}	
+    rng_state[ id ] = localState;
+}
+	
+
+
+
+
+
+__global__ void kernel_metropolis(double *lat, int parity, int mu, cuRNGState *rng_state){
+    size_t id = threadIdx.x + blockDim.x * blockIdx.x;
+    if( id >= HalfVolume() ) return ;
+    cuRNGState localState = rng_state[ id ];
+	double new_phase = Random<double>(localState) * 2. * M_PI;
+	double b = Random<double>(localState);
+    rng_state[ id ] = localState;
+    
+    double dS = MetropolisFunc(lat, id, parity, mu, new_phase);
+
+	if(dS > b){
+		lat[id + parity * HalfVolume() + mu * Volume()] = new_phase;
+	}
+}
+	
+	
+	
+	
+
+	
+	
+
+
+
+__global__ void kernel_overrelaxation_very_old(double *lat, int parity, int mu){
+    size_t id = threadIdx.x + blockDim.x * blockIdx.x;
+    if( id >= HalfVolume() ) return ;
+	double stapleRe = 0., stapleIm = 0.;
+	staple_old(lat, id, parity, mu, stapleRe, stapleIm);
+	int pos = id + parity * HalfVolume() + mu * Volume();
+	double phase_old = lat[pos];
+	double t2 = atan2(stapleIm, stapleRe);
+	double new_phase = fmod(6.* M_PI - phase_old - 2. * t2, 2.* M_PI);
+	lat[pos] = new_phase;
+}
+
+
+__global__ void kernel_overrelaxation_old(double *lat, int parity, int mu){
     size_t id = threadIdx.x + blockDim.x * blockIdx.x;
     if( id >= HalfVolume() ) return ;
 	double stapleRe = 0., stapleIm = 0.;
@@ -143,6 +224,11 @@ __global__ void kernel_overrelaxation(double *lat, int parity, int mu){
 }
 
 
+__global__ void kernel_overrelaxation(double *lat, int parity, int mu){
+    size_t id = threadIdx.x + blockDim.x * blockIdx.x;
+    if( id >= HalfVolume() ) return ;
+	lat[id + parity * HalfVolume() + mu * Volume()] = OvrFunc(lat, id, parity, mu);
+}
 
 
 
@@ -220,10 +306,10 @@ public:
 	for(parity = 0; parity < 2; ++parity)
 	for(mu = 0; mu < Dirs(); ++mu)
 	    apply(stream);
-    CUDA_SAFE_DEVICE_SYNC();
-    CUT_CHECK_ERROR("Kernel execution failed");
+    cudaDevSync();
+    cudaCheckError("Kernel execution failed");
 #ifdef TIMMINGS
-	CUDA_SAFE_DEVICE_SYNC( );
+	cudaDevSync();
     time.stop();
     timesec = time.getElapsedTimeInSec();
 #endif
@@ -298,10 +384,10 @@ public:
 	for(parity = 0; parity < 2; ++parity)
 	for(mu = 0; mu < Dirs(); ++mu)
 	    apply(stream);
-    CUDA_SAFE_DEVICE_SYNC();
-    CUT_CHECK_ERROR("Kernel execution failed");
+    cudaDevSync();
+    cudaCheckError("Kernel execution failed");
 #ifdef TIMMINGS
-	CUDA_SAFE_DEVICE_SYNC( );
+	cudaDevSync( );
     time.stop();
     timesec = time.getElapsedTimeInSec();
 #endif

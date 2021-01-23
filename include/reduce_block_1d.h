@@ -12,7 +12,34 @@
 
 
 template<typename T>
-inline __device__ void reduce_block_1d(T *ptr, const T &thread_val){
+inline __device__ void reduce_local_block_1d(T &ptr, const T thread_val){
+
+	SharedMemory<T> smem;
+
+	smem[threadIdx.x] = thread_val;
+	__syncthreads();
+
+	//Only one active warp do the reduction
+	//Bocks are always multiple of the warp size!
+	if(blockDim.x > WARP_SIZE && threadIdx.x < WARP_SIZE){
+		for(uint s = 1; s < blockDim.x / WARP_SIZE; s++)
+			smem[threadIdx.x] = smem[threadIdx.x] + smem[threadIdx.x + WARP_SIZE * s]; 
+	}
+	//__syncthreads(); //No need to synchronize inside warp!!!!
+	//One thread do the warp reduction
+	if(threadIdx.x == 0 ) {
+		T sum = 0.;
+		for(uint s = 0; s < WARP_SIZE; s++) 
+			sum += smem[s];
+		ptr = sum;
+	}
+	__syncthreads();
+}
+
+
+
+template<typename T>
+inline __device__ void reduce_block_1d(T *ptr, const T thread_val){
 
 	SharedMemory<T> smem;
 
@@ -33,6 +60,7 @@ inline __device__ void reduce_block_1d(T *ptr, const T &thread_val){
 			sum += smem[s];
 		CudaAtomicAdd(ptr, sum);
 	}
+	__syncthreads();
 }
 //DON'T FORGET to reserve the shared memory need by this in the kernel parameters:
 //                     <<<,,threads_per_block * sizeof(T),>>>

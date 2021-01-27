@@ -256,20 +256,6 @@ void UpdateLattice1(Array<double> *dev_lat, CudaRNG *rng_state, int metrop, int 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-using namespace U1;
-
 class Metropolis: Tunable{
 private:
 	Array<double>* lat;

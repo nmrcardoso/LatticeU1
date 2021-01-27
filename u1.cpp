@@ -232,7 +232,7 @@ int main(){
 				bool alongCharges = false; 
 				bool symmetrize = false;
 				int perpPoint = 0;
-				Array<complexd>* res0 = ML_TTO::MultiLevel(lattice, rng, 10, 16, 50, 5, 2, 5, radius, SquaredField, alongCharges, symmetrize, perpPoint);
+				Array<complexd>* res0 = MultiLevel(lattice, rng, 10, 16, 50, 5, 2, 5, radius, SquaredField, alongCharges, symmetrize, perpPoint);
 				//delete rng1;
 				delete res0;
 			}

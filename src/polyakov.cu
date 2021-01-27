@@ -89,7 +89,6 @@ complexd dev_polyakov(double *dev_lat, complexd *dev_poly, int threads, int bloc
 } 
 
 
-using namespace U1;
 
 class CalcPolyakov: Tunable{
 private:

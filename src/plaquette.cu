@@ -119,8 +119,6 @@ __global__ void kernel_plaquette(double *lat, complexd *plaq){
 
 
 
-using namespace U1;
-
 class Plaquette1: Tunable{
 private:
 	Array<double>* lat;

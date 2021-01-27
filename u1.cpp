@@ -36,7 +36,7 @@ Array<complexd>* GetPPFields(Array<complexd> *pp, Array<complexd> *ppfield, Arra
 	int nx = Grid(0);
 	int ny = nx;
 	Array<complexd> *field = new Array<complexd>(Host, 6 * nx * ny * Rmax);
-	CalcChromoField(ppfield, plaqfield, field, Rmax, nx, ny, chargeplane);
+	CalcChromoFieldPP(ppfield, plaqfield, field, Rmax, nx, ny, chargeplane);
 	int plane = nx * ny;
 	int fsize = 6 * plane;
 	for(int r = 0; r < Rmax; r++){
@@ -123,6 +123,79 @@ void Calc_PPFields(Array<double>* lattice, CudaRNG *rng){
 
 
 
+
+
+
+Array<complexd>* GetWLFields(Array<complexd> *wl, Array<complexd> *wlfield, Array<complexd> *plaqf, Array<complexd> *plaqfield, int Rmax, int Tmax, bool chargeplane){
+	int nx = Grid(0);
+	int ny = nx;
+	Array<complexd> *field = new Array<complexd>(Host, 6 * nx * ny * Rmax * Tmax);
+	CalcChromoFieldWL(wlfield, plaqfield, field, Rmax, Tmax, nx, ny, chargeplane);
+	int plane = nx * ny;
+	int fsize = 6 * plane;
+	for(int r = 0; r < Rmax; r++){
+		ofstream fieldsout;
+		string fname = "ChromoField_";
+		if(!chargeplane) fname = "ChromoField_mid_";
+		fname += GetLatticeNameI() + "_r_" + ToString(r) + ".dat";;
+		fieldsout.open(fname, ios::out);
+		if (!fieldsout.is_open()) {
+			cout << "Cannot create file: " << fname << endl;
+			exit(1);
+		}
+		cout << "Saving data to " << fname << endl;
+		fieldsout << std::scientific;
+		fieldsout.precision(14);
+		fieldsout << nx << '\t' << ny << '\t' << r << '\t' << Tmax << endl;
+		for(int t = 0; t < Tmax; t++){
+			fieldsout << wl->at(t+r*Tmax) << endl;
+		}
+		for(int f = 0; f < 6; f++)
+			fieldsout << plaqf->at(f) << endl;
+							
+		for( int ix = 0; ix < nx; ++ix )
+		for( int iy = 0; iy < ny; ++iy ) {
+			int id0 = ix + nx * iy;
+			for(int t = 0; t < Tmax; t++){
+				int idr = r + Rmax * t;	
+				fieldsout << ix - nx/2 << '\t' << iy - ny/2 << '\t' << t;
+				for(int f = 0; f < 6; f++){
+					int id1 = id0 + f * plane + fsize * idr;
+					fieldsout << '\t' << field->at(id1);
+				}
+				fieldsout << endl;
+			}
+		}
+		fieldsout.close();
+	}
+	return field;
+}
+
+void Calc_WLFields(Array<double>* lattice, CudaRNG *rng){
+	cout << "------------------------------" << endl;	
+	Array<complexd> *plaqfield; //This array is allocated and filled in PlaquetteFields
+	Array<complexd> *plaqf; //This array is allocated and filled in PlaquetteFields
+	PlaquetteFields(lattice, &plaqfield, &plaqf, true, true);
+	
+	int Rmax = Grid(0)/2+1;
+	int Tmax = Grid(TDir())/2+1;
+	Array<complexd> *wl;
+	Array<complexd> *wlfield;
+	WilsonLoop(lattice, &wl, &wlfield, Rmax, Tmax, true);
+	for(int r = 0; r < Rmax; r++)
+	for(int t = 0; t < Tmax; t++)
+		cout << r << '\t' << t << '\t' << wl->at(t+r*Tmax) << endl;
+		
+	Array<complexd> *field0 = GetWLFields(wl, wlfield, plaqf, plaqfield, Rmax, Tmax, true);
+	delete field0;
+	//Array<complexd> *field1 = GetPPFields(pp, ppfield, plaqf, plaqfield, Rmax, false);
+	//delete field1;
+
+	delete plaqfield;
+	delete plaqf;
+	delete wl;
+	delete wlfield;
+}
 
 
 
@@ -238,7 +311,7 @@ int main(){
 		}
 
 
-		if(1)if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
+		if(0)if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
 		
 			cout << "################################" << endl;
 			Timer p0, p1, p2, p3;
@@ -370,8 +443,9 @@ int main(){
 			calculateCorTime1(5, PARAMS::iter, plaq_corr, nsweep);
 		}
 		
-		if(0)if( PARAMS::iter > 990 && (PARAMS::iter%printiter)==0){
-			Calc_PPFields(lattice, rng);
+		if(1)if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
+			Calc_WLFields(lattice, rng);
+			//Calc_PPFields(lattice, rng);
 		}
 		
 		if(0&&(PARAMS::iter%printiter)==0){

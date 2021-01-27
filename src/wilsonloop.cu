@@ -120,8 +120,8 @@ public:
 
 
 
-template< class Real>
-__global__ void kernel_wilsonloopPreSPWL(Real *lat, complexd *wlinesp, complexd *wloop, int Rmax, int Tmax){
+template< class Real, bool getfield>
+__global__ void kernel_wilsonloopPreSPWL(Real *lat, complexd *wlinesp, complexd *wloop, complexd *wloopField, int Rmax, int Tmax){
     size_t id = threadIdx.x + blockDim.x * blockIdx.x;
 	for(int dir = 0; dir < Dirs()-1; dir++)
 	for(int r = 0; r < Rmax; r++){
@@ -143,7 +143,10 @@ __global__ void kernel_wilsonloopPreSPWL(Real *lat, complexd *wlinesp, complexd 
 			if(id < Volume()) top = wlinesp[idt + Volume() * dir + Volume() * (Dirs()-1) * r];
     
     		complexd wl = 0.0;
-    		if(id < Volume()) wl = bottom * right * conj(top) * conj(left);
+    		if(id < Volume()){
+    			wl = bottom * right * conj(top) * conj(left);
+    			if(getfield) wloopField[id + Volume() * dir + Volume() * (Dirs()-1) * (r + Rmax * t)] = wl;
+			}
     		
 			reduce_block_1d<complexd>(wloop + t + Tmax * r, wl);
   		
@@ -160,11 +163,12 @@ __global__ void kernel_wilsonloopPreSPWL(Real *lat, complexd *wlinesp, complexd 
     
    
 
-template< class Real>
+template< class Real, bool getfield>
 class wilsonloopWPreWL: Tunable{
 private:
 	Array<Real>* lat;
 	Array<complexd>* wlinesp;
+	Array<complexd>* wloopField;
 	Array<complexd>* wloop;
 	Array<complexd>* wloop_dev;
 	int R, T;
@@ -182,16 +186,19 @@ private:
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
 	wloop_dev->Clear();
-	kernel_wilsonloopPreSPWL<Real><<<tp.grid, tp.block, tp.shared_bytes, stream>>>(lat->getPtr(), wlinesp->getPtr(), wloop_dev->getPtr(), R, T);
+	if(getfield) kernel_wilsonloopPreSPWL<Real, getfield><<<tp.grid, tp.block, tp.shared_bytes, stream>>>(lat->getPtr(), wlinesp->getPtr(), wloop_dev->getPtr(), wloopField->getPtr(), R, T);
+	else kernel_wilsonloopPreSPWL<Real, getfield><<<tp.grid, tp.block, tp.shared_bytes, stream>>>(lat->getPtr(), wlinesp->getPtr(), wloop_dev->getPtr(), 0, R, T);
 }
 public:
    wilsonloopWPreWL(Array<Real>* lat, Array<complexd>* wlinesp, int R, int T) : lat(lat), wlinesp(wlinesp), R(R), T(T) {
 	size = Volume();
 	wloop = new Array<complexd>(Host, R*T);
 	wloop_dev = new Array<complexd>(Device, R*T);
+	if(getfield) wloopField = new Array<complexd>(Device, R*T*Volume()*(Dirs()-1));  
 	timesec = 0.0;  
 }
    ~wilsonloopWPreWL(){ delete wloop_dev; };
+   Array<complexd>* GetField(){ return wloopField; }
    Array<complexd>* Run(const cudaStream_t &stream){
 #ifdef TIMMINGS
     time.start();
@@ -242,8 +249,8 @@ public:
 
 		
 		
-template< class Real>
-__global__ void kernel_wilsonloop(Real *lat, complexd *wloop, int Rmax, int Tmax){
+template< class Real, bool getfield>
+__global__ void kernel_wilsonloop(Real *lat, complexd *wloop, complexd *wloopField, int Rmax, int Tmax){
     size_t id = threadIdx.x + blockDim.x * blockIdx.x;
 
 	for(int dir = 0; dir < Dirs()-1; dir++)
@@ -272,7 +279,10 @@ __global__ void kernel_wilsonloop(Real *lat, complexd *wloop, int Rmax, int Tmax
 				idt = indexNO_neg(idt, dir, 1);
 			}        
     		complexd wl = 0.0;
-    		if(id < Volume()) wl = bottom * right * conj(top) * conj(left);
+    		if(id < Volume()){
+    			wl = bottom * right * conj(top) * conj(left);
+    			if(getfield) wloopField[id + Volume() * dir + Volume() * (Dirs()-1) * (r + Rmax * t)] = wl;
+			}
     		
 			reduce_block_1d<complexd>(wloop + t + Tmax * r, wl);
      		
@@ -289,11 +299,12 @@ __global__ void kernel_wilsonloop(Real *lat, complexd *wloop, int Rmax, int Tmax
     
    
 
-template< class Real>
+template< class Real, bool getfield>
 class wilsonloop: Tunable{
 private:
 	Array<Real>* lat;
 	Array<complexd>* wloop;
+	Array<complexd>* wloopField;
 	Array<complexd>* wloop_dev;
 	int R, T;
 	int size;
@@ -310,16 +321,19 @@ private:
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
 	wloop_dev->Clear();
-	kernel_wilsonloop<Real><<<tp.grid, tp.block, tp.shared_bytes, stream>>>(lat->getPtr(), wloop_dev->getPtr(), R, T);
+	if(getfield) kernel_wilsonloop<Real, getfield><<<tp.grid, tp.block, tp.shared_bytes, stream>>>(lat->getPtr(), wloop_dev->getPtr(), wloopField->getPtr(), R, T);
+	else kernel_wilsonloop<Real, getfield><<<tp.grid, tp.block, tp.shared_bytes, stream>>>(lat->getPtr(), wloop_dev->getPtr(), 0, R, T);
 }
 public:
    wilsonloop(Array<Real>* lat, int R, int T) : lat(lat), R(R), T(T) {
 	size = Volume();
 	wloop = new Array<complexd>(Host, R*T);
 	wloop_dev = new Array<complexd>(Device, R*T);
+	if(getfield) wloopField = new Array<complexd>(Device, R*T*Volume()*(Dirs()-1));
 	timesec = 0.0;  
 }
    ~wilsonloop(){ delete wloop_dev; };
+   Array<complexd>* GetField(){ return wloopField; }
    Array<complexd>* Run(const cudaStream_t &stream){
 #ifdef TIMMINGS
     time.start();
@@ -373,14 +387,14 @@ Array<complexd>* WilsonLoop(Array<Real>* lat, int R, int T, bool FastVersion){
 		Array<Real>* tmp = LatticeConvert(lat, true);
 		WilsonSPLines<Real> wlines(tmp, R);
 		Array<complexd>* wlinesp = wlines.Run();
-		wilsonloopWPreWL<Real> wloop(tmp, wlinesp, R, T);
+		wilsonloopWPreWL<Real, false> wloop(tmp, wlinesp, R, T);
 		Array<complexd>* res = wloop.Run();
 		delete tmp;
 		return res;
 	}
 	else{
 		Array<Real>* tmp = LatticeConvert(lat, true);
-		wilsonloop<Real> wloop(tmp, R, T);
+		wilsonloop<Real, false> wloop(tmp, R, T);
 		Array<complexd>* res = wloop.Run();
 		delete tmp;
 		return res;
@@ -390,6 +404,31 @@ Array<complexd>* WilsonLoop(Array<Real>* lat, int R, int T, bool FastVersion){
 template Array<complexd>* WilsonLoop(Array<double>* lat, int R, int T, bool FastVersion);
 template Array<complexd>* WilsonLoop(Array<complexd>* lat, int R, int T, bool FastVersion);
 
+
+
+
+
+template<class Real>
+void WilsonLoop(Array<Real>* lat, Array<complexd>** wl, Array<complexd>** wlfield, int R, int T, bool FastVersion){
+	Array<Real>* tmp = LatticeConvert(lat, true);
+	if(FastVersion){
+		WilsonSPLines<Real> wlines(tmp, R);
+		Array<complexd>* wlinesp = wlines.Run();
+		wilsonloopWPreWL<Real, true> wloop(tmp, wlinesp, R, T);
+		*wl = wloop.Run();
+		*wlfield = wloop.GetField();
+	}
+	else{
+		Array<Real>* tmp = LatticeConvert(lat, true);
+		wilsonloop<Real, true> wloop(tmp, R, T);
+		*wl = wloop.Run();
+		*wlfield = wloop.GetField();
+		delete tmp;
+	}
+	delete tmp;
+}
+template void WilsonLoop(Array<double>* lat, Array<complexd>** wl, Array<complexd>** wlfield, int R, int T, bool FastVersion);
+template void WilsonLoop(Array<complexd>* lat, Array<complexd>** wl, Array<complexd>** wlfield, int R, int T, bool FastVersion);
 
 
 

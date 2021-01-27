@@ -7,7 +7,9 @@
 namespace U1{
 
 
-void CalcChromoField(Array<complexd> *ploop, Array<complexd> *plaqfield, Array<complexd> *field, int radius, int nx, int ny, bool chargeplane);
+void CalcChromoFieldPP(Array<complexd> *ploop, Array<complexd> *plaqfield, Array<complexd> *field, int radius, int nx, int ny, bool chargeplane);
+
+void CalcChromoFieldWL(Array<complexd> *ploop, Array<complexd> *plaqfield, Array<complexd> *field, int Rmax, int Tmax, int nx, int ny, bool chargeplane);
 
 
 

@@ -695,7 +695,7 @@ public:
 
 
 
-Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int k4, int n2, int k2, int metrop, int ovrn, int radius, bool SquaredField, bool alongCharges, bool symmetrize, int perpPoint){
+Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int n4, int k4, int n2, int k2, int metrop, int ovrn, int radius, bool SquaredField, bool alongCharges, bool symmetrize, int perpPoint){
 	if(Dirs() < 4){
 		cout << "Only implemented for 4D lattice..." << endl;
 		Finalize(1);
@@ -851,8 +851,8 @@ Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int 
 
 }
 
-Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int k4, int n2, int k2, int metrop, int ovrn, int radius, bool SquaredField, bool alongCharges, bool symmetrize, int perpPoint){
-	return ML_TTO::MultiLevel(lat, rng_state, n4, k4, n2, k2, metrop, ovrn, radius, SquaredField, alongCharges, symmetrize, perpPoint);
+Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int n4, int k4, int n2, int k2, int metrop, int ovrn, int radius, bool SquaredField, bool alongCharges, bool symmetrize, int perpPoint){
+	return ML_TTO::MultiLevelTTO(lat, rng_state, n4, k4, n2, k2, metrop, ovrn, radius, SquaredField, alongCharges, symmetrize, perpPoint);
 }
 
 }

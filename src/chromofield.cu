@@ -17,8 +17,6 @@
 
 #include "parameters.h"
 #include "index.h"
-#include "staple.h"
-#include "random.h"
 
 
 #include "tune.h"
@@ -442,8 +440,8 @@ template <bool chargeplane>
 class ChromoField: Tunable{
 private:
    ChromoFieldArg arg;
-   complexd *chromofield;
- //  Real *pl;
+   Array<complexd> *chromofield;
+   Array<complexd> *field;
    int size;
    double timesec;
 #ifdef TIMMINGS
@@ -457,27 +455,26 @@ private:
    unsigned int minThreads() const { return size; }
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-	cudaSafeCall(cudaMemset(arg.field, 0, 6 * arg.nx * arg.ny * arg.radius * sizeof(complexd)));
+	field->Clear();
 	if(chargeplane) kernel_ChromoField<<<tp.grid, tp.block, tp.shared_bytes, stream>>>(arg);
 	else kernel_ChromoFieldMidFluxTube<<<tp.grid, tp.block, tp.shared_bytes, stream>>>(arg);
 }
 
 public:
-   ChromoField(complexd *ploop, complexd *plaqfield, complexd *chromofield, int radius, int nx, int ny):chromofield(chromofield){
+   ChromoField(Array<complexd> *ploop, Array<complexd> *plaqfield, Array<complexd> *chromofield, int radius, int nx, int ny): chromofield(chromofield){
 	size = SpatialVolume();
 	timesec = 0.0;
 	arg.nx = nx;
 	arg.ny = ny;
 	arg.radius = radius;
-	arg.ploop = ploop;
-	arg.plaq = plaqfield;
-	arg.field = (complexd *)dev_malloc( 6 * arg.nx * arg.ny * arg.radius * sizeof(complexd));
+	arg.ploop = ploop->getPtr();
+	arg.plaq = plaqfield->getPtr();
+	field = new Array<complexd>(Device, chromofield->Size());
+	arg.field = field->getPtr();
 	cout << arg.ploop << '\t' << arg.plaq << '\t' << arg.field << endl;
-	cout << arg.nx << '\t' << arg.ny << '\t' << arg.radius << endl;
-	//arg.pl = (Real *)dev_malloc( sizeof(Real));
-  
+	cout << arg.nx << '\t' << arg.ny << '\t' << arg.radius << endl; 
 }
-   ~ChromoField(){dev_free(arg.field);}//dev_free(arg.pl);};
+   ~ChromoField(){delete field;}
    void Run(const cudaStream_t &stream){
 #ifdef TIMMINGS
     ChromoFieldtime.start();
@@ -485,31 +482,30 @@ public:
     apply(stream);
     cudaDevSync();
     cudaCheckError("Kernel execution failed");
-    //cudaSafeCall(cudaMemcpy(pl, arg.pl, radius*sizeof(complexd), cudaMemcpyDeviceToHost));
-    cudaSafeCall(cudaMemcpy(chromofield, arg.field, 6 * arg.nx * arg.ny * arg.radius * sizeof(complexd), cudaMemcpyDeviceToHost));
+    chromofield->Copy(field);
     //normalize!!!!!!
 	int plane = arg.nx * arg.ny;
 	int fsize = 6 * plane;
 	for(int r = 0; r < arg.radius; r++){
 		if((r+1)%2){
 			for(int f = 0; f < fsize; f++)
-			  chromofield[f + r * fsize] /= double(12 * size);
+			  chromofield->at(f + r * fsize) /= double(12 * size);
 			if(chargeplane){
 			  for(int f = 2 * plane; f < 3 * plane; f++) //Ez^2
-				chromofield[f + r * fsize] *= 2.0; 
+				chromofield->at(f + r * fsize) *= 2.0; 
 			  for(int f = 5 * plane; f < 6 * plane; f++) //Bz^2
-				chromofield[f + r * fsize] *= 0.5; 
+				chromofield->at(f + r * fsize) *= 0.5; 
 			}
 			else{
 			  for(int f = plane; f < 2 * plane; f++) //Ey^2
-				chromofield[f + r * fsize] *= 2.0; 
+				chromofield->at(f + r * fsize) *= 2.0; 
 			  for(int f = 4 * plane; f < 5 * plane; f++) //By^2
-				chromofield[f + r * fsize] *= 0.5; 
+				chromofield->at(f + r * fsize) *= 0.5; 
 			}
 		}
 		else{
 			for(int f = 0; f < fsize; f++)
-			  chromofield[f + r * fsize] /= double(6 * size);
+			  chromofield->at(f + r * fsize) /= double(6 * size);
 		}
 	}
 #ifdef TIMMINGS
@@ -553,26 +549,26 @@ public:
 
 
 template<bool chargeplane>
-void CalcChromoField(complexd *ploop, complexd *plaqfield, complexd *field, int radius, int nx, int ny){
-  Timer mtime;
-  mtime.start(); 
-  ChromoField<chargeplane> cfield(ploop, plaqfield, field, radius, nx, ny);
-  cfield.Run();
-  cudaDevSync( );
-  mtime.stop();
-  cout << "Time ChromoField:  " <<  mtime.getElapsedTimeInSec() << " s"  << endl;
+void CalcChromoField(Array<complexd> *ploop, Array<complexd> *plaqfield, Array<complexd> *field, int radius, int nx, int ny){
+	Timer mtime;
+	mtime.start(); 
+	ChromoField<chargeplane> cfield(ploop, plaqfield, field, radius, nx, ny);
+	cfield.Run();
+	cudaDevSync( );
+	mtime.stop();
+	cout << "Time ChromoField:  " <<  mtime.getElapsedTimeInSec() << " s"  << endl;
 }
 
 
 
 
-void CalcChromoField(complexd *ploop, complexd *plaqfield, complexd *field, int radius, int nx, int ny, bool chargeplane){
+void CalcChromoField(Array<complexd> *ploop, Array<complexd> *plaqfield, Array<complexd> *field, int radius, int nx, int ny, bool chargeplane){
 	if(Dirs() < 4){
 		cout << "Only implemented for 4D lattice..." << endl;
 		Finalize(1);
 	}
-  if(chargeplane) CalcChromoField<true>(ploop, plaqfield, field, radius, nx, ny);
-  else CalcChromoField<false>(ploop, plaqfield, field, radius, nx, ny);
+	if(chargeplane) CalcChromoField<true>(ploop, plaqfield, field, radius, nx, ny);
+	else CalcChromoField<false>(ploop, plaqfield, field, radius, nx, ny);
 }
 
 

@@ -443,7 +443,7 @@ Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int 
 
 
 
-MultiLevelRes* MultiLevelField(Array<double> *lat, CudaRNG *rng_state, int n4, int k4, int n2, int k2, int metrop, int ovrn){
+void MultiLevelField(Array<double> *lat, CudaRNG *rng_state, Array<complexd> **pp, Array<complexd> **ppfield, int n4, int k4, int n2, int k2, int metrop, int ovrn){
 
 	if( Grid(TDir())%4 != 0 ) {
 		cout << "Error: Cannot Apply MultiLevel Algorithm...\n Nt is not multiple of 4...\n Exiting..." << endl;
@@ -513,10 +513,9 @@ MultiLevelRes* MultiLevelField(Array<double> *lat, CudaRNG *rng_state, int n4, i
 	delete dev_mhit;
 	delete l2;
 	//Average tensor T4 and Calculate P(0)*conj(P(r))
-	MultiLevelRes *res = new MultiLevelRes;	
-	res->poly = l4avgpp.Run();
+	*pp = l4avgpp.Run();
 	delete l4;
-	res->ppSpace = l4avgpp.getField();
+	*ppfield = l4avgpp.getField();
 
 	std::ofstream fileout;
 	std::string filename = "Pot_mlevel_" + GetLatticeNameI();
@@ -534,12 +533,11 @@ MultiLevelRes* MultiLevelField(Array<double> *lat, CudaRNG *rng_state, int n4, i
 	cout << std::setprecision(14);
 	
 	for(int r = 0; r < radius; ++r){
-		cout << r+1 << '\t' << res->poly->at(r) << endl;
-		fileout << r+1 << '\t' << res->poly->at(r) << endl;
+		cout << r+1 << '\t' << (*pp)->at(r) << endl;
+		fileout << r+1 << '\t' << (*pp)->at(r) << endl;
 	}
 	
-	fileout.close();	
-	return res;
+	fileout.close();
 }
 
 

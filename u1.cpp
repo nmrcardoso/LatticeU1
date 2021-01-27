@@ -443,9 +443,9 @@ int main(){
 			calculateCorTime1(5, PARAMS::iter, plaq_corr, nsweep);
 		}
 		
-		if(1)if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
-			Calc_WLFields(lattice, rng);
-			//Calc_PPFields(lattice, rng);
+		if(0)if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
+			//Calc_WLFields(lattice, rng);
+			Calc_PPFields(lattice, rng);
 		}
 		
 		if(0&&(PARAMS::iter%printiter)==0){

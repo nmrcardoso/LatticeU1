@@ -2,11 +2,10 @@
 
 Code includes:
 - Isotropic and Anisotropic lattice
-- Multihit smearing
 - Multilevel for PP*
 - Multilevel for PP*O (charges placed along z direction)
 - APE smearing (to check)
-- MultiHit
+- Multihit smearing
 - Wilson Loop
 - Plaquette field
 - Electric and Magnetic fields based on the Polyakov loop

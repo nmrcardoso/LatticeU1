@@ -32,7 +32,94 @@ using namespace std;
 using namespace U1;
 
 
+Array<complexd>* GetPPFields(Array<complexd> *pp, Array<complexd> *ppfield, Array<complexd> *plaqf, Array<complexd> *plaqfield, int Rmax, bool chargeplane){
+	int nx = Grid(0);
+	int ny = nx;
+	Array<complexd> *field = new Array<complexd>(Host, 6 * nx * ny * Rmax);
+	CalcChromoField(ppfield, plaqfield, field, Rmax, nx, ny, chargeplane);
+	int plane = nx * ny;
+	int fsize = 6 * plane;
+	for(int r = 0; r < Rmax; r++){
+		ofstream fieldsout;
+		string fname = "ChromoField_";
+		if(!chargeplane) fname = "ChromoField_mid_";
+		fname += GetLatticeNameI() + "_r_" + ToString(r+1) + ".dat";;
+		fieldsout.open(fname, ios::out);
+		if (!fieldsout.is_open()) {
+			cout << "Cannot create file: " << fname << endl;
+			exit(1);
+		}
+		cout << "Saving data to " << fname << endl;
+		fieldsout << std::scientific;
+		fieldsout.precision(14);
+		fieldsout << nx << '\t' << ny << '\t' << r+1 << endl;
+		fieldsout << pp->at(r) << endl;
+		for(int f = 0; f < 6; f++)
+			fieldsout << plaqf->at(f) << endl;
+		
+				
+		for( int ix = 0; ix < nx; ++ix )
+		for( int iy = 0; iy < ny; ++iy ) {
+			int id0 = ix + nx * iy;
+			fieldsout << ix - nx/2 << '\t' << iy - ny/2;
+			for(int f = 0; f < 6; f++){
+				int id1 = id0 + f * plane + fsize * r;
+				fieldsout << '\t' << field->at(id1);
+			}
+			fieldsout << endl;
+		}
+		fieldsout.close();
+	}
+	return field;
+}
 
+void Calc_PPFields(Array<double>* lattice, CudaRNG *rng){
+	complexd plaqv[2];
+	Plaquette(lattice, plaqv, true);
+	Array<double>* latno = LatticeConvert(lattice, true);
+	cout << "------------------------------" << endl;
+	/*PlaqFieldArg* plaqfield = new PlaqFieldArg;
+	PlaquetteFields(lattice, plaqfield, false, true);
+	cout << plaqfield->plaq << '\t' << plaqfield->plaqfield << endl;
+	delete plaqfield;
+	
+	cout << "------------------------------" << endl;
+	plaqfield = new PlaqFieldArg;
+	PlaquetteFields(lattice, plaqfield, true, true);
+	delete plaqfield;
+	
+	
+	cout << "------------------------------" << endl;
+	plaqfield = new PlaqFieldArg;
+	PlaquetteFields(latno, plaqfield, false, false);
+	delete plaqfield;
+	
+	cout << "------------------------------" << endl;
+	plaqfield = new PlaqFieldArg;
+	PlaquetteFields(latno, plaqfield, true, false);
+	delete plaqfield;*/
+	
+	int Rmax = Grid(0)/2;
+	Array<complexd> *plaqfield; //This array is allocated and filled in PlaquetteFields
+	Array<complexd> *plaqf; //This array is allocated and filled in PlaquetteFields
+	PlaquetteFields(latno, &plaqfield, &plaqf, false, false);
+	delete latno;
+	Array<complexd> *pp; //This array is allocated and filled in MultiLevelField
+	Array<complexd> *ppfield; //This array is allocated and filled in MultiLevelField
+	MultiLevelField(lattice, rng, &pp, &ppfield, 1, 0, 1, 0, 1, 3, Rmax);
+	//MultiLevelField(lattice, rng, &pp, &ppfield, 10, 16, 100, 5, 2, 5);
+	cout << pp->Size() << '\t' << ppfield->Size() << endl;
+	
+	Array<complexd> *field0 = GetPPFields(pp, ppfield, plaqf, plaqfield, Rmax, true);
+	delete field0;
+	//Array<complexd> *field1 = GetPPFields(pp, ppfield, plaqf, plaqfield, Rmax, false);
+	//delete field1;
+
+	delete plaqfield;
+	delete plaqf;
+	delete pp;
+	delete ppfield;
+}
 
 
 
@@ -46,14 +133,14 @@ int main(){
 	
 	//omp_set_num_threads(1);
 	int gpuID = 0;
-	Start(gpuID, VERBOSE, TUNE_YES); // Important. Setup GPU id and setup tune kernels and verbosity level. See cuda_error_check.cpp/.h
+	Start(gpuID, DEBUG_VERBOSE, TUNE_YES); // Important. Setup GPU id and setup tune kernels and verbosity level. See cuda_error_check.cpp/.h
 	
 	int dirs = 4; //Need to update kernels to take into account less than 4 directions
 	int ls = 24; //The number of points in each direction must be an even number!!!!!!!!!
 	int Nx=ls;
 	int Ny=ls;
 	int Nz=ls;
-	int Nt=8;
+	int Nt=12;
 	double beta = 1.;
 	double aniso = 1.;
 	int imetrop = 1;
@@ -151,21 +238,35 @@ int main(){
 		}
 
 
-		if(0)if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
+		if(1)if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
 		
 			cout << "################################" << endl;
 			Timer p0, p1, p2, p3;
-		/*	cout << "########### Wilson Loop #####################" << endl;
-			p0.start();
-			int Rmax = Grid(0)/2+1;
-			int Tmax = Grid(TDir())/2+1;
-			Array<complexd>* wlres = WilsonLoop(lattice, Rmax, Tmax);
-			for(int r = 0; r < Rmax; r++)
-			for(int t = 0; t < Tmax; t++)
-				cout << r << '\t' << t << '\t' << wlres->at(t+r*Tmax) << endl;
-			delete wlres;
-			std::cout << "p0: " << p0.getElapsedTime() << " s" << endl;	
-			cout << "########### Wilson Loop with MultiHit #####################" << endl;
+			if(1){
+				cout << "########### Wilson Loop #####################" << endl;
+				p0.start();
+				int Rmax = Grid(0)/2+1;
+				int Tmax = Grid(TDir())/2+1;
+				Array<complexd>* wlres = WilsonLoop(lattice, Rmax, Tmax, true);
+				for(int r = 0; r < Rmax; r++)
+				for(int t = 0; t < Tmax; t++)
+					cout << r << '\t' << t << '\t' << wlres->at(t+r*Tmax) << endl;
+				delete wlres;
+				std::cout << "p0: " << p0.getElapsedTime() << " s" << endl;	
+			}
+			if(1){
+				cout << "########### Wilson Loop #####################" << endl;
+				p0.start();
+				int Rmax = Grid(0)/2+1;
+				int Tmax = Grid(TDir())/2+1;
+				Array<complexd>* wlres = WilsonLoop(lattice, Rmax, Tmax, false);
+				for(int r = 0; r < Rmax; r++)
+				for(int t = 0; t < Tmax; t++)
+					cout << r << '\t' << t << '\t' << wlres->at(t+r*Tmax) << endl;
+				delete wlres;
+				std::cout << "p0: " << p0.getElapsedTime() << " s" << endl;	
+			}
+		/*	cout << "########### Wilson Loop with MultiHit #####################" << endl;
 			p0.start();
 			Array<complexd>* out11 = ApplyMultiHit(lattice, 1);			
 			wlres = WilsonLoop(out11, Rmax, Tmax);
@@ -205,58 +306,57 @@ int main(){
 			std::cout << "p1: " << p1.getElapsedTime() << " s" << endl;			
 			cout << "########### P(0)*conj(P(r)) Using MultiLevel #####################" << endl;
 			p2.start();
-			//MultiLevel(lattice, rng, 50, 10, 50, 10, 2, 5);
-			//MultiLevel(lattice, rng, 1, 1, 1, 1, 1, 3);
-			//Array<complexd>* results = MultiLevel(lattice, rng, 1, 0, 1, 0, 1, 3);
+			int Rmax = Grid(0)/2;
+			//MultiLevel(lattice, rng, 50, 10, 50, 10, 2, 5, Rmax);
+			//MultiLevel(lattice, rng, 1, 1, 1, 1, 1, 3, Rmax);
+			//Array<complexd>* results = MultiLevel(lattice, rng, 1, 0, 1, 0, 1, 3, Rmax);
 			
 			CudaRNG *rng1 = new CudaRNG(1234, HalfVolume());
 			
-			//Array<complexd>* results = MultiLevel(lattice, rng1, 10, 16, 25, 5, 2, 5);
-			Array<complexd>* results = MultiLevel(lattice, rng1, 10, 1, 20, 1, 2, 5);
+			//Array<complexd>* results = MultiLevel(lattice, rng1, 10, 16, 25, 5, 2, 5, Rmax);
+			Array<complexd>* results = MultiLevel(lattice, rng1, 10, 1, 20, 1, 2, 5, Rmax);
 			delete results;
 			p2.stop();
 			std::cout << "p2: " << p2.getElapsedTime() << " s" << endl;
 			cout << "################################" << endl;		
 			
 			delete rng1;
-			
 			*/
-			cout << "########### P(0)*conj(P(r))O_munu Using MultiLevel #####################" << endl;
-			p2.start();
-			int radius = 8;
-			for(int radius = 2; radius <= 8; radius++){
-				bool SquaredField = true;
-				bool alongCharges = false; 
-				bool symmetrize = false;
-				int perpPoint = 0;
-				Array<complexd>* res0 = MultiLevelTTO(lattice, rng, 10, 16, 50, 5, 2, 5, radius, SquaredField, alongCharges, symmetrize, perpPoint);
-				delete res0;
-			}
-			p2.stop();
-			std::cout << "p2: " << p2.getElapsedTime() << " s" << endl;
-			cout << "################################" << endl;	
 			
+			
+						
+			if(0){
+				cout << "########### P(0)*conj(P(r)) Using MultiLevel #####################" << endl;
+				p2.start();
+				int Rmax = Grid(0)/2;
+				Array<complexd>* results = MultiLevel(lattice, rng, 1000, 20, 200, 5, 1, 3, Rmax, true);
+				delete results;
+				p2.stop();
+				std::cout << "p2: " << p2.getElapsedTime() << " s" << endl;
+				cout << "################################" << endl;	
+			}
+			
+			
+			
+			
+			if(0){
+				cout << "########### P(0)*conj(P(r))O_munu Using MultiLevel #####################" << endl;
+				p2.start();
+				int radius = 8;
+				for(int radius = 2; radius <= 8; radius++){
+					bool SquaredField = true;
+					bool alongCharges = false; 
+					bool symmetrize = false;
+					int perpPoint = 0;
+					Array<complexd>* res0 = MultiLevelTTO(lattice, rng, 10, 16, 50, 5, 2, 5, radius, SquaredField, alongCharges, symmetrize, perpPoint);
+					delete res0;
+				}
+				p2.stop();
+				std::cout << "p2: " << p2.getElapsedTime() << " s" << endl;
+				cout << "################################" << endl;	
+			}
 			//break;
 		}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 		if(0)
@@ -270,132 +370,8 @@ int main(){
 			calculateCorTime1(5, PARAMS::iter, plaq_corr, nsweep);
 		}
 		
-		if(1)if( PARAMS::iter > 90 && (PARAMS::iter%printiter)==0){
-			Plaquette(lattice, plaqv, true);
-			Array<double>* latno = LatticeConvert(lattice, true);
-			
-			
-			
-			cout << "------------------------------" << endl;
-			/*PlaqFieldArg* plaqfield = new PlaqFieldArg;
-			PlaquetteFields(lattice, plaqfield, false, true);
-			cout << plaqfield->plaq << '\t' << plaqfield->plaqfield << endl;
-			delete plaqfield;
-			
-			cout << "------------------------------" << endl;
-			plaqfield = new PlaqFieldArg;
-			PlaquetteFields(lattice, plaqfield, true, true);
-			delete plaqfield;
-			
-			
-			cout << "------------------------------" << endl;
-			plaqfield = new PlaqFieldArg;
-			PlaquetteFields(latno, plaqfield, false, false);
-			delete plaqfield;
-			
-			cout << "------------------------------" << endl;
-			plaqfield = new PlaqFieldArg;
-			PlaquetteFields(latno, plaqfield, true, false);
-			delete plaqfield;*/
-			
-			
-			
-			Array<complexd> *plaqfield;
-			Array<complexd> *plaqf;
-			PlaquetteFields(latno, &plaqfield, &plaqf, false, false);
-			delete latno;
-			Array<complexd> *pp;
-			Array<complexd> *ppfield;
-			MultiLevelField(lattice, rng, &pp, &ppfield, 1, 0, 1, 0, 1, 3);
-			//MultiLevelRes* ppres = MultiLevelField(lattice, rng, 10, 16, 100, 5, 2, 5);
-			cout << pp->Size() << '\t' << ppfield->Size() << endl;
-			
-			
-			int nx = Grid(0);
-			int ny = nx;
-			int radius = Grid(0)/2;
-			{
-			Array<complexd> *field = new Array<complexd>(Host, 6 * nx * ny * radius);
-			CalcChromoField(ppfield, plaqfield, field, radius, nx, ny, true);
-			int plane = nx * ny;
-			int fsize = 6 * plane;
-			for(int r = 0; r < radius; r++){
-				ofstream fieldsout;
-				string fname = "ChromoField_" + GetLatticeNameI() + "_r_" + ToString(r+1) + ".dat";;
-				fieldsout.open(fname, ios::out);
-				if (!fieldsout.is_open()) {
-					cout << "Cannot create file: " << fname << endl;
-					exit(1);
-				}
-				cout << "Creating file: " << fname << endl;
-				fieldsout.precision(12);
-				fieldsout << nx << '\t' << ny << '\t' << r+1 << endl;
-				fieldsout << pp->at(r) << endl;
-				for(int f = 0; f < 6; f++)
-					fieldsout << plaqf->at(f) << endl;
-				
-						
-				for( int ix = 0; ix < nx; ++ix )
-				for( int iy = 0; iy < ny; ++iy ) {
-					int id0 = ix + nx * iy;
-					fieldsout << ix - nx/2 << '\t' << iy - ny/2;
-					for(int f = 0; f < 6; f++){
-						int id1 = id0 + f * plane + fsize * r;
-						fieldsout << '\t' << field->at(id1);
-					}
-					fieldsout << endl;
-				}
-				fieldsout.close();
-			}
-			delete field;
-			}
-			if(0){
-			Array<complexd> *field = new Array<complexd>(Host, 6 * nx * ny * radius);
-			CalcChromoField(ppfield, plaqfield, field, radius, nx, ny, false);		
-			
-			
-			int plane = nx * ny;
-			int fsize = 6 * plane;	
-			
-			for(int r = 0; r < radius; r++){
-				ofstream fieldsout;
-				string fname = "ChromoField_mid_" + GetLatticeNameI() + "_r_" + ToString(r+1) + ".dat";;
-				fieldsout.open(fname, ios::out);
-				if (!fieldsout.is_open()) {
-					cout << "Cannot create file: " << fname << endl;
-					exit(1);
-				}
-				cout << "Creating file: " << fname << endl;
-				fieldsout.precision(12);
-				fieldsout << nx << '\t' << ny << '\t' << r+1 << endl;
-				fieldsout << pp->at(r) << endl;
-				for(int f = 0; f < 6; f++)
-					fieldsout << plaqf->at(f) << endl;
-				
-						
-				for( int ix = 0; ix < nx; ++ix )
-				for( int iy = 0; iy < ny; ++iy ) {
-					int id0 = ix + nx * iy;
-					fieldsout << ix - nx/2 << '\t' << iy - ny/2;
-					for(int f = 0; f < 6; f++){
-						int id1 = id0 + f * plane + fsize * r;
-						fieldsout << '\t' << field->at(id1);
-					}
-					fieldsout << endl;
-				}
-				fieldsout.close();
-			}
-			delete field;
-			}
-			
-			delete plaqfield;
-			delete plaqf;
-			delete pp;
-			delete ppfield;
-			
-	
-			
-			//break;
+		if(0)if( PARAMS::iter > 990 && (PARAMS::iter%printiter)==0){
+			Calc_PPFields(lattice, rng);
 		}
 		
 		if(0&&(PARAMS::iter%printiter)==0){

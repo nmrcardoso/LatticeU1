@@ -342,7 +342,7 @@ public:
 
 
 
-Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int k4, int n2, int k2, int metrop, int ovrn){
+Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int k4, int n2, int k2, int metrop, int ovrn, int Rmax, bool PrintResultsAtEveryN4){
 
 	if( Grid(TDir())%4 != 0 ) {
 		cout << "Error: Cannot Apply MultiLevel Algorithm...\n Nt is not multiple of 4...\n Exiting..." << endl;
@@ -351,12 +351,11 @@ Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int 
 	Array<double>* dev_lat = new Array<double>(Device);
 	dev_lat->Copy(lat);
 
-	int radius = Grid(0)/2;
 	int nl2 = Grid(TDir())/2;
-	int sl2 = nl2*(Dirs()-1)*radius*SpatialVolume();
+	int sl2 = nl2*(Dirs()-1)*Rmax*SpatialVolume();
 	Array<complexd> *l2 = new Array<complexd>(Device, sl2);
 	int nl4 = Grid(TDir())/4;
-	size_t sl4 = nl4*(Dirs()-1)*radius*SpatialVolume();
+	size_t sl4 = nl4*(Dirs()-1)*Rmax*SpatialVolume();
 	Array<complexd> *l4 = new Array<complexd>(Device, sl4);
 	
 	// metropolis and overrelaxation algorithm
@@ -371,9 +370,9 @@ Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int 
 	Array<complexd>* dev_mhit;
 	
 	double l2norm = 1./double(n2);
-	L2AvgL4ML l2avgl4(l2, l4, sl4, radius, l2norm);
+	L2AvgL4ML l2avgl4(l2, l4, sl4, Rmax, l2norm);
 	double l4norm = 1./double(n4);
-	L4AvgPP<false> l4avgpp(l4, radius, l4norm);
+	L4AvgPP<false> l4avgpp(l4, Rmax, l4norm);
 
 	l4->Clear();
 	for(int i = 0; i < n4; ++i){
@@ -393,16 +392,16 @@ Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int 
 			//Extract temporal links and apply MultiHit
 			dev_mhit = mhitVol.Run();			
 			//Calculate tensor T2
-			L2ML l2ml(dev_mhit, l2, sl2, radius);
+			L2ML l2ml(dev_mhit, l2, sl2, Rmax);
 			l2ml.Run();
 		}
 		//Average tensor T2 and Calculate tensor T4
 		l2avgl4.Run();	
 		
 		
-		if(0){
+		if(PrintResultsAtEveryN4){
 			double l4norm1 = 1./double(i+1);
-			L4AvgPP<false> l4avgpp1(l4, radius, l4norm1);
+			L4AvgPP<false> l4avgpp1(l4, Rmax, l4norm1);
 			Array<complexd>* res = l4avgpp1.Run();
 			cout << res << endl;
 			delete res;
@@ -428,7 +427,7 @@ Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int 
 	}
 	fileout.precision(12);
 	
-	for(int r = 0; r < radius; ++r){
+	for(int r = 0; r < Rmax; ++r){
 		cout << r+1 << '\t' << res->at(r) << endl;
 		fileout << r+1 << '\t' << res->at(r) << endl;
 	}
@@ -443,7 +442,7 @@ Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int 
 
 
 
-void MultiLevelField(Array<double> *lat, CudaRNG *rng_state, Array<complexd> **pp, Array<complexd> **ppfield, int n4, int k4, int n2, int k2, int metrop, int ovrn){
+void MultiLevelField(Array<double> *lat, CudaRNG *rng_state, Array<complexd> **pp, Array<complexd> **ppfield, int n4, int k4, int n2, int k2, int metrop, int ovrn, int Rmax, bool PrintResultsAtEveryN4){
 
 	if( Grid(TDir())%4 != 0 ) {
 		cout << "Error: Cannot Apply MultiLevel Algorithm...\n Nt is not multiple of 4...\n Exiting..." << endl;
@@ -452,12 +451,11 @@ void MultiLevelField(Array<double> *lat, CudaRNG *rng_state, Array<complexd> **p
 	Array<double>* dev_lat = new Array<double>(Device);
 	dev_lat->Copy(lat);
 
-	int radius = Grid(0)/2;
 	int nl2 = Grid(TDir())/2;
-	int sl2 = nl2*(Dirs()-1)*radius*SpatialVolume();
+	int sl2 = nl2*(Dirs()-1)*Rmax*SpatialVolume();
 	Array<complexd> *l2 = new Array<complexd>(Device, sl2);
 	int nl4 = Grid(TDir())/4;
-	size_t sl4 = nl4*(Dirs()-1)*radius*SpatialVolume();
+	size_t sl4 = nl4*(Dirs()-1)*Rmax*SpatialVolume();
 	Array<complexd> *l4 = new Array<complexd>(Device, sl4);
 	
 	// metropolis and overrelaxation algorithm
@@ -472,9 +470,9 @@ void MultiLevelField(Array<double> *lat, CudaRNG *rng_state, Array<complexd> **p
 	Array<complexd>* dev_mhit;
 	
 	double l2norm = 1./double(n2);
-	L2AvgL4ML l2avgl4(l2, l4, sl4, radius, l2norm);
+	L2AvgL4ML l2avgl4(l2, l4, sl4, Rmax, l2norm);
 	double l4norm = 1./double(n4);
-	L4AvgPP<true> l4avgpp(l4, radius, l4norm);
+	L4AvgPP<true> l4avgpp(l4, Rmax, l4norm);
 
 	l4->Clear();
 	for(int i = 0; i < n4; ++i){
@@ -494,16 +492,16 @@ void MultiLevelField(Array<double> *lat, CudaRNG *rng_state, Array<complexd> **p
 			//Extract temporal links and apply MultiHit
 			dev_mhit = mhitVol.Run();			
 			//Calculate tensor T2
-			L2ML l2ml(dev_mhit, l2, sl2, radius);
+			L2ML l2ml(dev_mhit, l2, sl2, Rmax);
 			l2ml.Run();
 		}
 		//Average tensor T2 and Calculate tensor T4
 		l2avgl4.Run();	
 		
 		
-		if(0){
+		if(PrintResultsAtEveryN4){
 			double l4norm1 = 1./double(i+1);
-			L4AvgPP<false> l4avgpp1(l4, radius, l4norm1);
+			L4AvgPP<false> l4avgpp1(l4, Rmax, l4norm1);
 			Array<complexd>* res = l4avgpp1.Run();
 			cout << res << endl;
 			delete res;
@@ -528,11 +526,13 @@ void MultiLevelField(Array<double> *lat, CudaRNG *rng_state, Array<complexd> **p
 		std::cout << "Error opening file: " << filename << std::endl;
 		exit(1);
 	}
-	fileout.precision(12);
+	cout << "Saving data to " << filename << endl;
+	fileout << std::scientific;
+	fileout.precision(14);
 	cout << std::scientific;
 	cout << std::setprecision(14);
 	
-	for(int r = 0; r < radius; ++r){
+	for(int r = 0; r < Rmax; ++r){
 		cout << r+1 << '\t' << (*pp)->at(r) << endl;
 		fileout << r+1 << '\t' << (*pp)->at(r) << endl;
 	}

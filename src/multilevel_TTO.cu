@@ -808,7 +808,9 @@ Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int n4, i
 		std::cout << "Error opening file: " << filename << std::endl;
 		exit(1);
 	}
-	fileout.precision(12);
+	cout << "Saving data to " << filename << endl;
+	fileout << std::scientific;
+	fileout.precision(14);
 	
 	
 	if(symmetrize){	

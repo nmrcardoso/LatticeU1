@@ -8,7 +8,7 @@
 namespace U1{
 
 template<class Real>
-Array<complexd>* WilsonLoop(Array<Real>* lat, int R, int T);
+Array<complexd>* WilsonLoop(Array<Real>* lat, int R, int T, bool FastVersion=true);
 
 
 

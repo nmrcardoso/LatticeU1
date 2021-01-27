@@ -105,6 +105,36 @@ InlineHostDevice complexd Staple(const double *lat, const int id, const int pari
 
 
 
+InlineHostDevice complexd Staple(const complexd *lat, const int id, const int parity, const int mu){
+
+	complexd stapleSS = 0.0;
+	complexd stapleST = 0.0;
+	
+	int idmu1 = indexEO_neg(id, parity, mu, 1);			
+	for(int nu = 0; nu < Dirs(); nu++)  if(mu != nu) {
+		complexd upperStaple = lat[idmu1 + Volume() * nu];
+		upperStaple *= conj(lat[indexEO_neg(id, parity, nu, 1) + Volume() * mu]);
+		upperStaple *= conj(lat[id + parity * HalfVolume() + nu * Volume()]);
+		
+		complexd lowerStaple = conj(lat[indexEO_neg(id, parity, mu, 1, nu, -1) + Volume() * nu]);	
+		lowerStaple *= conj(lat[indexEO_neg(id, parity, nu, -1) + Volume() * mu]);	
+		lowerStaple *= conj(lat[indexEO_neg(id, parity, nu, -1) + Volume() * nu]);	
+		
+		if( mu == TDir() || nu == TDir() ){
+			stapleST += upperStaple + lowerStaple;		
+		}
+		else{
+			stapleSS += upperStaple + lowerStaple;		
+		}
+	}
+	
+	return stapleSS / Aniso() + stapleST * Aniso();
+}
+
+
+
+
+
 
 
 
@@ -142,6 +172,7 @@ InlineHostDevice void Staple(const double *lat, const int id, const int parity, 
 		}
 	}
 }
+
 
 
 

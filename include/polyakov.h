@@ -13,7 +13,8 @@ void polyakov(double *lat, double *poly);
 complexd Polyakov(Array<double> *dev_lat, bool print=false);
 
 //With tune
-Array<complexd>* Poly2(Array<double> *dev_lat, bool multihit);
+template<class Real>
+Array<complexd>* Poly2(Array<Real> *dev_lat, bool multihit);
 
 }
 

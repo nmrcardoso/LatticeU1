@@ -90,12 +90,17 @@ InlineHostDevice double OvrFunc(double *lat, const int id, const int parity, con
 
 
 InlineHostDevice complexd MultiHit(const double *lat, const int id, const int parity, const int mu){
-	/*double W_re, W_im;	
-	staple(lat, id, parity, TDir(), W_re, W_im);			
-	double alpha = sqrt(W_re*W_re+W_im*W_im);
-	double ba = Beta() * alpha;*/
-	
-	complexd staple = Staple(lat, id, parity, TDir());				
+	complexd staple = Staple(lat, id, parity, mu);				
+	double alpha = staple.abs();
+	double ba = Beta() * alpha;
+	double temp = cyl_bessel_i1(ba)/(cyl_bessel_i0(ba)*alpha);
+	//double temp = besseli1(ba)/(besseli0(ba)*alpha);
+	complexd val(temp * staple.real(), -temp * staple.imag());
+	return val;
+}
+
+InlineHostDevice complexd MultiHit(const complexd *lat, const int id, const int parity, const int mu){
+	complexd staple = Staple(lat, id, parity, mu);				
 	double alpha = staple.abs();
 	double ba = Beta() * alpha;
 	double temp = cyl_bessel_i1(ba)/(cyl_bessel_i0(ba)*alpha);

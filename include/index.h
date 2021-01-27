@@ -11,9 +11,19 @@
 namespace U1{
 
 
+
+
+
 InlineHostDevice complexd exp_ir(const double a){
 	return complexd(cos(a), sin(a));
 }
+
+
+template<class Real>
+InlineHostDevice complexd GetValue(Real val){ return val; }
+template<> InlineHostDevice complexd GetValue<double>(double val){ return exp_ir(val);}
+template<> InlineHostDevice complexd GetValue<complexd>(complexd val){ return val;}
+
 
 
 InlineHostDevice int indexIdS(const int x[]){

@@ -12,7 +12,6 @@ void plaquette(double *lat, double *plaq);
 complexd* Plaquette(Array<double> *dev_lat, complexd *plaq, bool print=false);
 
 
-
 class PlaqFieldArg{
 	public:
 	size_t size;

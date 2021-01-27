@@ -23,6 +23,11 @@
 #include "actime.h"
 
 
+#include "chromofield.h"
+#include "smearing.h"
+#include "wilsonloop.h"
+
+
 using namespace std;
 using namespace U1;
 
@@ -41,14 +46,14 @@ int main(){
 	
 	//omp_set_num_threads(1);
 	int gpuID = 0;
-	Start(gpuID, VERBOSE, TUNE_YES); // Important. Setup GPU id and setup tune kernels and verbosity level. See cuda_error_check.cpp/.h
+	Start(gpuID, DEBUG_VERBOSE, TUNE_YES); // Important. Setup GPU id and setup tune kernels and verbosity level. See cuda_error_check.cpp/.h
 	
 	int dirs = 4; //Need to update kernels to take into account less than 4 directions
 	int ls = 24; //The number of points in each direction must be an even number!!!!!!!!!
 	int Nx=ls;
 	int Ny=ls;
 	int Nz=ls;
-	int Nt=12;
+	int Nt=8;
 	double beta = 1.;
 	double aniso = 1.;
 	int imetrop = 1;
@@ -57,7 +62,7 @@ int main(){
 	//Setup global parameters in Host and Device
 	SetupLatticeParameters(Nx, Ny, Nz, Nt, dirs, beta, aniso, imetrop, ovrn);
 	
-	int maxIter = 1000;
+	int maxIter = 1000000;
 	int printiter = 100;
 	bool hotstart = false;
 	
@@ -65,6 +70,21 @@ int main(){
 	Timer t0;
 	t0.start();
 	
+	
+	
+	/*Array<double> *aa = new Array<double>(Device, Volume()*Dirs()); 
+	
+	double *ptr = 0;
+	cout << ptr << endl;
+	aa->Allocate(&ptr, Host, 10);
+	cout << ptr << endl;
+	cout << ptr[0] << endl;
+	cout << ptr[1] << endl;
+	aa->Release(ptr, Host);
+	cout << ptr << endl;
+	
+	
+	return 0;*/
 	
 	//cout << "#####:::::: " << GetLatticeName() << endl;
       
@@ -97,6 +117,8 @@ int main(){
 
 	//Array array to store the phases
 	Array<double> *lattice = new Array<double>(Device, Volume()*Dirs()); //also initialize aray to 0
+	lattice->Backup();
+
 	//Initialize cuda rng
 	int seed = 1234;
 	CudaRNG *rng = new CudaRNG(seed, HalfVolume());
@@ -109,9 +131,9 @@ int main(){
 	complexd ployv = Polyakov(lattice);
 	cout << PARAMS::iter << '\t' << plaqv[0] << '\t' << plaqv[1] << endl;
 	cout << "L: " << ployv.real() << '\t' << ployv.imag() << "\t|L|: " << ployv.abs() << endl;
+    
     fileout << PARAMS::iter << '\t' << plaqv[0] << '\t' << plaqv[1] << endl;
 	fileout1 << PARAMS::iter << '\t' << ployv.real() << '\t' << ployv.imag() << "\t|L|: " << ployv.abs() << endl;
-  
       
     vector<double> plaq_corr;
 	int mininter = 700;
@@ -130,8 +152,29 @@ int main(){
 
 
 		if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
+		
 			cout << "################################" << endl;
 			Timer p0, p1, p2, p3;
+		/*	cout << "########### Wilson Loop #####################" << endl;
+			p0.start();
+			int Rmax = Grid(0)/2+1;
+			int Tmax = Grid(TDir())/2+1;
+			Array<complexd>* wlres = WilsonLoop(lattice, Rmax, Tmax);
+			for(int r = 0; r < Rmax; r++)
+			for(int t = 0; t < Tmax; t++)
+				cout << r << '\t' << t << '\t' << wlres->at(t+r*Tmax) << endl;
+			delete wlres;
+			std::cout << "p0: " << p0.getElapsedTime() << " s" << endl;	
+			cout << "########### Wilson Loop with MultiHit #####################" << endl;
+			p0.start();
+			Array<complexd>* out11 = ApplyMultiHit(lattice, 1);			
+			wlres = WilsonLoop(out11, Rmax, Tmax);
+			delete out11;
+			for(int r = 0; r < Rmax; r++)
+			for(int t = 0; t < Tmax; t++)
+				cout << r << '\t' << t << '\t' << wlres->at(t+r*Tmax) << endl;
+			delete wlres;
+			std::cout << "p0: " << p0.getElapsedTime() << " s" << endl;	
 			cout << "########### P(0)*conj(P(r)) #####################" << endl;
 			p0.start();
 			Array<complexd>* res = Poly2(lattice, false);
@@ -143,18 +186,85 @@ int main(){
 			res = Poly2(lattice, true);
 			delete res;
 			p1.stop();
+			std::cout << "p1: " << p1.getElapsedTime() << " s" << endl;	
+			cout << "########### P(0)*conj(P(r)) Using MultiHit a #####################" << endl;
+			p1.start();			
+			Array<complexd>* out = ApplyMultiHit(lattice, 1);
+			res = Poly2(out, false);
+			delete out;
+			delete res;
+			p1.stop();
+			std::cout << "p1: " << p1.getElapsedTime() << " s" << endl;	
+			cout << "########### P(0)*conj(P(r)) Using APE time #####################" << endl;
+			p1.start();
+			Array<double>* out1 = ApplyAPE(lattice, .9, 1, 1);
+			res = Poly2(out1, false);
+			delete out1;
+			delete res;
+			p1.stop();
 			std::cout << "p1: " << p1.getElapsedTime() << " s" << endl;			
 			cout << "########### P(0)*conj(P(r)) Using MultiLevel #####################" << endl;
 			p2.start();
-			Array<complexd>* results = MultiLevel(lattice, rng, 10, 1, 20, 1, 2, 5);
+			//MultiLevel(lattice, rng, 50, 10, 50, 10, 2, 5);
+			//MultiLevel(lattice, rng, 1, 1, 1, 1, 1, 3);
+			//Array<complexd>* results = MultiLevel(lattice, rng, 1, 0, 1, 0, 1, 3);
+			
+			CudaRNG *rng1 = new CudaRNG(1234, HalfVolume());
+			
+			//Array<complexd>* results = MultiLevel(lattice, rng1, 10, 16, 25, 5, 2, 5);
+			Array<complexd>* results = MultiLevel(lattice, rng1, 10, 1, 20, 1, 2, 5);
 			delete results;
 			p2.stop();
 			std::cout << "p2: " << p2.getElapsedTime() << " s" << endl;
 			cout << "################################" << endl;		
+			
+			delete rng1;
+			
+			*/
+			cout << "########### P(0)*conj(P(r))O_munu Using MultiLevel #####################" << endl;
+			p2.start();
+			//MultiLevel(lattice, rng, 50, 10, 50, 10, 2, 5);
+			//MultiLevel(lattice, rng, 1, 1, 1, 1, 1, 3);
+			//rng1 = new CudaRNG(seed, HalfVolume());
+			int radius = 8;
+			for(int radius = 2; radius <= 8; radius++){
+				bool SquaredField = true;
+				bool alongCharges = false; 
+				bool symmetrize = false;
+				int perpPoint = 0;
+				Array<complexd>* res0 = ML_TTO::MultiLevel(lattice, rng, 10, 16, 50, 5, 2, 5, radius, SquaredField, alongCharges, symmetrize, perpPoint);
+				//delete rng1;
+				delete res0;
+			}
+			p2.stop();
+			std::cout << "p2: " << p2.getElapsedTime() << " s" << endl;
+			cout << "################################" << endl;	
+			
+			//break;
 		}
 
 
-		if(0) if(PARAMS::iter >= mininter){
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+		if(0)
+		if(PARAMS::iter >= mininter){
 			Plaquette(lattice, plaqv, false);
 			plaq_corr.push_back( (plaqv[0].real()+plaqv[1].real())*0.5);
 				
@@ -163,6 +273,139 @@ int main(){
 			calculateCorTime(5, PARAMS::iter, plaq_corr, nsweep);
 			calculateCorTime1(5, PARAMS::iter, plaq_corr, nsweep);
 		}
+		
+		if(0)if( PARAMS::iter > 990 && (PARAMS::iter%printiter)==0){
+			Plaquette(lattice, plaqv, true);
+			Array<double>* latno = LatticeConvert(lattice, true);
+			
+			
+			
+			cout << "------------------------------" << endl;
+			/*PlaqFieldArg* plaqfield = new PlaqFieldArg;
+			PlaquetteFields(lattice, plaqfield, false, true);
+			cout << plaqfield->plaq << '\t' << plaqfield->plaqfield << endl;
+			delete plaqfield;
+			
+			cout << "------------------------------" << endl;
+			plaqfield = new PlaqFieldArg;
+			PlaquetteFields(lattice, plaqfield, true, true);
+			delete plaqfield;
+			
+			
+			cout << "------------------------------" << endl;
+			plaqfield = new PlaqFieldArg;
+			PlaquetteFields(latno, plaqfield, false, false);
+			delete plaqfield;
+			
+			cout << "------------------------------" << endl;
+			plaqfield = new PlaqFieldArg;
+			PlaquetteFields(latno, plaqfield, true, false);
+			delete plaqfield;*/
+			
+			
+			
+			PlaqFieldArg* plaqfield = new PlaqFieldArg;
+			PlaquetteFields(latno, plaqfield, false, false);
+			delete latno;
+			//MultiLevelRes* ppres = MultiLevelField(lattice, rng, 1, 0, 1, 0, 1, 3);
+			MultiLevelRes* ppres = MultiLevelField(lattice, rng, 10, 16, 100, 5, 2, 5);
+			cout << ppres->poly->Size() << '\t' << ppres->ppSpace->Size() << endl;
+			
+			
+			int nx = Grid(0);
+			int ny = nx;
+			int radius = Grid(0)/2;
+			
+			{
+			complexd *field = (complexd*)safe_malloc(6 * nx * ny * radius * sizeof(complexd));
+			CalcChromoField(ppres->ppSpace->getPtr(), plaqfield->plaqfield, field, radius, nx, ny, true);
+			int plane = nx * ny;
+			int fsize = 6 * plane;	
+			
+			for(int r = 0; r < radius; r++){
+				ofstream fieldsout;
+				string fname = "ChromoField_" + GetLatticeNameI() + "_r_" + ToString(r+1) + ".dat";;
+				fieldsout.open(fname, ios::out);
+				if (!fieldsout.is_open()) {
+					cout << "Cannot create file: " << fname << endl;
+					exit(1);
+				}
+				cout << "Creating file: " << fname << endl;
+				fieldsout.precision(12);
+				fieldsout << nx << '\t' << ny << '\t' << r+1 << endl;
+				fieldsout << ppres->poly->at(r) << endl;
+				for(int f = 0; f < 6; f++)
+					fieldsout << plaqfield->plaq[f] << endl;
+				
+						
+				for( int ix = 0; ix < nx; ++ix )
+				for( int iy = 0; iy < ny; ++iy ) {
+					int id0 = ix + nx * iy;
+					fieldsout << ix - nx/2 << '\t' << iy - ny/2;
+					for(int f = 0; f < 6; f++){
+						int id1 = id0 + f * plane + fsize * r;
+						fieldsout << '\t' << field[id1];
+					}
+					fieldsout << endl;
+				}
+				fieldsout.close();
+			}
+			host_free(field);
+			}
+			{
+			complexd *field = (complexd*)safe_malloc(6 * nx * ny * radius * sizeof(complexd));
+			CalcChromoField(ppres->ppSpace->getPtr(), plaqfield->plaqfield, field, radius, nx, ny, false);		
+			
+			
+			int plane = nx * ny;
+			int fsize = 6 * plane;	
+			
+			for(int r = 0; r < radius; r++){
+				ofstream fieldsout;
+				string fname = "ChromoField_mid_" + GetLatticeNameI() + "_r_" + ToString(r+1) + ".dat";;
+				fieldsout.open(fname, ios::out);
+				if (!fieldsout.is_open()) {
+					cout << "Cannot create file: " << fname << endl;
+					exit(1);
+				}
+				cout << "Creating file: " << fname << endl;
+				fieldsout.precision(12);
+				fieldsout << nx << '\t' << ny << '\t' << r+1 << endl;
+				fieldsout << ppres->poly->at(r) << endl;
+				for(int f = 0; f < 6; f++)
+					fieldsout << plaqfield->plaq[f] << endl;
+				
+						
+				for( int ix = 0; ix < nx; ++ix )
+				for( int iy = 0; iy < ny; ++iy ) {
+					int id0 = ix + nx * iy;
+					fieldsout << ix - nx/2 << '\t' << iy - ny/2;
+					for(int f = 0; f < 6; f++){
+						int id1 = id0 + f * plane + fsize * r;
+						fieldsout << '\t' << field[id1];
+					}
+					fieldsout << endl;
+				}
+				fieldsout.close();
+			}
+			host_free(field);
+			}
+			
+			delete ppres;
+			delete plaqfield;
+			
+	
+			
+			//break;
+		}
+		
+		if(0&&(PARAMS::iter%printiter)==0){
+			cout << "Iter: " << PARAMS::iter << " \t";
+			//Plaquette(lattice, plaqv);
+			ployv = Polyakov(lattice);
+			fileout << PARAMS::iter << '\t' << plaqv[0] << '\t' << plaqv[1] << endl;
+			fileout1 << PARAMS::iter << '\t' << ployv.real() << '\t' << ployv.imag() << '\t' << ployv.abs() << endl;			
+		}			
 	}
 	fileout.close();
 	fileout1.close();

@@ -25,10 +25,10 @@ typedef enum TuneMode_S {
 } TuneMode;
 
 
-typedef enum ReadMode_S {
+typedef enum StoreMode_S {
     Host,
     Device
-} ReadMode;
+} StoreMode;
 
 
 #define ALLOC_INVALID_ENUM INT_MIN
@@ -56,7 +56,7 @@ typedef enum FieldLocation_s {
 
 
 
-inline cudaMemcpyKind GetMemcpyKind(const ReadMode in, const ReadMode out){
+inline cudaMemcpyKind GetMemcpyKind(const StoreMode in, const StoreMode out){
     cudaMemcpyKind cptype;
     switch( in ) {
     case Host :

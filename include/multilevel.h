@@ -26,5 +26,10 @@ MultiLevelRes* MultiLevelField(Array<double> *dev_lat, CudaRNG *rng_state, int n
 
 
 
+namespace ML_TTO{
+
+Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int k4, int n2, int k2, int metrop, int ovrn, int radius, bool SquaredField, bool alongCharges, bool symmetrize, int perpPoint = 0);
+}
+
 }
 #endif

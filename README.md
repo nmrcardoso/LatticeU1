@@ -12,7 +12,10 @@ Code includes:
   - 2D results in the charges plane
   - 2D results in the perpendicular plane in the middle of the charges
   - charges placed along y direction
-- TODO: Electric and Magnetic fields based on the Wilson loop
+- Electric and Magnetic fields based on the Wilson loop
+  - 2D results in the charges plane
+  - 2D results in the perpendicular plane in the middle of the charges
+  - charges placed along y direction
 - Auto kernel tunning
 
 Before compiling, please change line 16 of Makefile for the correct GPU architecture:

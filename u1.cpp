@@ -277,7 +277,6 @@ int main(){
 
 	//Array array to store the phases
 	Array<double> *lattice = new Array<double>(Device, Volume()*Dirs()); //also initialize aray to 0
-	lattice->Backup();
 
 	//Initialize cuda rng
 	int seed = 1234;

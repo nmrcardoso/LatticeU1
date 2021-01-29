@@ -267,7 +267,7 @@ namespace U1 {
   /**
    * Perform a cuMemAlloc with error-checking.  This function is to
    * guarantee a unique memory allocation on the device, since
-   * cudaMalloc can be redirected (as is the case with QDPJIT).  This
+   * cudaMalloc can be redirected.  This
    * should only be called via the dev_pinned_malloc() macro,
    * defined in alloc.h.
    */

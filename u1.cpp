@@ -271,8 +271,8 @@ int main(){
     fileout1.precision(12);
     
    
-    
-    
+    //Only used if: export U1_ENABLE_MANAGED_MEMORY=1
+    use_managed_memory();
 
 	//Array array to store the phases
 	Array<double> *lattice = new Array<double>(Device, Volume()*Dirs()); //also initialize aray to 0

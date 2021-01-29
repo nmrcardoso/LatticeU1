@@ -7,12 +7,13 @@
 #include "cuda_error_check.h"
 #include "enum.h"
 #include "parameters.h"
+#include "object.h"
 
 
 namespace U1{
 
 template<class Real>
-class Array{	
+class Array : public Object{ 	
 	public:
 	Array(){ 
 		ptr = 0; 
@@ -33,7 +34,7 @@ class Array{
 		ptr_backup = 0;
 		Allocate(&ptr, location, size);
 	}
-	~Array(){ Release(); }
+	virtual ~Array(){ Release(); }
 	
 	Real*  getPtr(){ return ptr; }
 	

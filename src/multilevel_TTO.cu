@@ -296,8 +296,8 @@ public:
    double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
    long long flop() const { return 0;}
    long long bytes() const{ return 0;}
-   double time(){	return timesec;}
-   void stat(){	cout << "OverRelaxation:  " <<  time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
+   double get_time(){	return timesec;}
+   void stat(){	cout << "L2ML:  " <<  get_time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
   TuneKey tuneKey() const {
     std::stringstream vol, aux;
     vol << PARAMS::Grid[0] << "x";
@@ -412,8 +412,8 @@ public:
    double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
    long long flop() const { return 0;}
    long long bytes() const{ return 0;}
-   double time(){	return timesec;}
-   void stat(){	cout << "OverRelaxation:  " <<  time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
+   double get_time(){	return timesec;}
+   void stat(){	cout << "L2AvgL4ML:  " <<  get_time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
   TuneKey tuneKey() const {
     std::stringstream vol, aux;
     vol << PARAMS::Grid[0] << "x";
@@ -547,8 +547,8 @@ public:
    double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
    long long flop() const { return 0;}
    long long bytes() const{ return 0;}
-   double time(){	return timesec;}
-   void stat(){	cout << "OverRelaxation:  " <<  time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
+   double get_time(){	return timesec;}
+   void stat(){	cout << "L4AvgPP:  " <<  get_time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
   TuneKey tuneKey() const {
     std::stringstream vol, aux;
     vol << PARAMS::Grid[0] << "x";
@@ -668,8 +668,8 @@ public:
    double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
    long long flop() const { return 0;}
    long long bytes() const{ return 0;}
-   double time(){	return timesec;}
-   void stat(){	cout << "OverRelaxation:  " <<  time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
+   double get_time(){	return timesec;}
+   void stat(){	cout << "PlaqFields:  " <<  get_time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
   TuneKey tuneKey() const {
     std::stringstream vol, aux;
     vol << PARAMS::Grid[0] << "x";
@@ -696,6 +696,23 @@ public:
 
 
 Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int n4, int k4, int n2, int k2, int metrop, int ovrn, int radius, bool SquaredField, bool alongCharges, bool symmetrize, int perpPoint){
+	Timer a0; a0.start();
+
+	cout << "R: " << radius << endl;
+	cout << "Level 0:" << endl;
+	cout << "\tNº time links per slice: " << 2 << endl;
+	cout << "\tNº iterations: " << n2 << endl;
+	cout << "\tNº updates: " << k2 << endl;
+	cout << "\tNº metropolis updates: " << metrop << endl;
+	cout << "\tNº overrelaxation updates: " << ovrn << endl;
+	
+	cout << "Level 1:" << endl;
+	cout << "\tNº time links per slice: " << 4 << endl;
+	cout << "\tNº iterations: " << n4 << endl;
+	cout << "\tNº updates: " << k4 << endl;
+	cout << "\tNº metropolis updates: " << metrop << endl;
+	cout << "\tNº overrelaxation updates: " << ovrn << endl;
+	
 	if(Dirs() < 4){
 		cout << "Only implemented for 4D lattice..." << endl;
 		Finalize(1);
@@ -848,6 +865,8 @@ Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int n4, i
 	}
 	fileout.close();
 	delete ppo;	
+	a0.stop();
+	std::cout << "time " << a0.getElapsedTime() << " s" << endl;
 	return pp;
 }
 

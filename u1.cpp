@@ -282,7 +282,7 @@ int main(){
 	//Initialize cuda rng
 	int seed = 1234;
 	CudaRNG *rng = new CudaRNG(seed, HalfVolume());
-	//CudaRNG1 *rngv = new CudaRNG1(seed, Volume());
+	//CudaRNG1 *rngv = new CudaRNG1(seed, HalfVolume());
 	
 	if(hotstart){
 		HotStart(lattice, rng);
@@ -313,15 +313,26 @@ int main(){
 			cout << "L: " << ployv.real() << '\t' << ployv.imag() << "\t|L|: " << ployv.abs() << endl;
 			fileout1 << PARAMS::iter << '\t' << ployv.real() << '\t' << ployv.imag() << "\t|L|: " << ployv.abs() << endl;
 		}
-		if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
+		if(0)if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
 			Array<complexd> *fmunu_vol, *fmunu;
 			Fmunu(lattice, &fmunu_vol, &fmunu);
 			delete fmunu_vol;
 			delete fmunu;
 		}
 		
+		
+		if(1)if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
+			int Rmax = Grid(0)/2;
+			CudaRNG *rng11 = new CudaRNG(seed, HalfVolume());
+			Array<complexd>* rresults = MLgeneric::MultiLevel(lattice, rng11, 2, 12, 5, 10, 20, 5, 1, 3, Rmax, false);
+			delete rng11; delete rresults;
+			rng11 = new CudaRNG(seed, HalfVolume());
+			rresults = MLgeneric::MultiLevel(lattice, rng11, 2, 4, 5, 10, 20, 5, 1, 3, Rmax, false);
+			delete rng11; delete rresults;
+		}
+		
 			
-		if(1)if( PARAMS::iter >= 1 && (PARAMS::iter%printiter)==0){
+		if(1)if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
 			if(0){
 				cout << "########### P(0)*conj(P(r))O_munu Using MultiLevel #####################" << endl;
 				Timer p2;

@@ -112,8 +112,8 @@ public:
    double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
    long long flop() const { return 0;}
    long long bytes() const{ return 0;}
-   double time(){	return timesec;}
-   void stat(){	cout << "OverRelaxation:  " <<  time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
+   double get_get_time(){	return timesec;}
+   void stat(){	cout << "L2ML:  " <<  get_get_time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
   TuneKey tuneKey() const {
     std::stringstream vol, aux;
     vol << PARAMS::Grid[0] << "x";
@@ -208,8 +208,8 @@ public:
    double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
    long long flop() const { return 0;}
    long long bytes() const{ return 0;}
-   double time(){	return timesec;}
-   void stat(){	cout << "OverRelaxation:  " <<  time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
+   double get_get_time(){	return timesec;}
+   void stat(){	cout << "L2AvgL4ML:  " <<  get_get_time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
   TuneKey tuneKey() const {
     std::stringstream vol, aux;
     vol << PARAMS::Grid[0] << "x";
@@ -319,8 +319,8 @@ public:
    double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
    long long flop() const { return 0;}
    long long bytes() const{ return 0;}
-   double time(){	return timesec;}
-   void stat(){	cout << "OverRelaxation:  " <<  time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
+   double get_get_time(){	return timesec;}
+   void stat(){	cout << "L4AvgPP:  " <<  get_get_time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
   TuneKey tuneKey() const {
     std::stringstream vol, aux;
     vol << PARAMS::Grid[0] << "x";
@@ -346,6 +346,22 @@ public:
 
 Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int k4, int n2, int k2, int metrop, int ovrn, int Rmax, bool PrintResultsAtEveryN4){
 	Timer a0; a0.start();
+
+	cout << "Rmax: " << Rmax << endl;
+	cout << "Level 0:" << endl;
+	cout << "\tNº time links per slice: " << 2 << endl;
+	cout << "\tNº iterations: " << n2 << endl;
+	cout << "\tNº updates: " << k2 << endl;
+	cout << "\tNº metropolis updates: " << metrop << endl;
+	cout << "\tNº overrelaxation updates: " << ovrn << endl;
+	
+	cout << "Level 1:" << endl;
+	cout << "\tNº time links per slice: " << 4 << endl;
+	cout << "\tNº iterations: " << n4 << endl;
+	cout << "\tNº updates: " << k4 << endl;
+	cout << "\tNº metropolis updates: " << metrop << endl;
+	cout << "\tNº overrelaxation updates: " << ovrn << endl;
+	
 	if( Grid(TDir())%4 != 0 ) {
 		cout << "Error: Cannot Apply MultiLevel Algorithm...\n Nt is not multiple of 4...\n Exiting..." << endl;
 		exit(1);
@@ -448,6 +464,22 @@ Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int 
 
 void MultiLevelField(Array<double> *lat, CudaRNG *rng_state, Array<complexd> **pp, Array<complexd> **ppfield, int n4, int k4, int n2, int k2, int metrop, int ovrn, int Rmax, bool PrintResultsAtEveryN4){
 	Timer a0; a0.start();
+
+	cout << "Rmax: " << Rmax << endl;
+	cout << "Level 0:" << endl;
+	cout << "\tNº time links per slice: " << 2 << endl;
+	cout << "\tNº iterations: " << n2 << endl;
+	cout << "\tNº updates: " << k2 << endl;
+	cout << "\tNº metropolis updates: " << metrop << endl;
+	cout << "\tNº overrelaxation updates: " << ovrn << endl;
+	
+	cout << "Level 1:" << endl;
+	cout << "\tNº time links per slice: " << 4 << endl;
+	cout << "\tNº iterations: " << n4 << endl;
+	cout << "\tNº updates: " << k4 << endl;
+	cout << "\tNº metropolis updates: " << metrop << endl;
+	cout << "\tNº overrelaxation updates: " << ovrn << endl;
+	
 	if( Grid(TDir())%4 != 0 ) {
 		cout << "Error: Cannot Apply MultiLevel Algorithm...\n Nt is not multiple of 4...\n Exiting..." << endl;
 		exit(1);

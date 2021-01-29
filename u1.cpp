@@ -270,17 +270,20 @@ int main(){
 	cout << "Creating file: " << filename1 << endl;
     fileout1.precision(12);
     
-    
-    
+   
     
     
 
 	//Array array to store the phases
 	Array<double> *lattice = new Array<double>(Device, Volume()*Dirs()); //also initialize aray to 0
-
+	//Array<double> *lattice = new Array<double>(Managed, Volume()*Dirs()); //also initialize aray to 0
+	//cout << "<----->: " << (*lattice)(0) << endl;
+	
 	//Initialize cuda rng
 	int seed = 1234;
 	CudaRNG *rng = new CudaRNG(seed, HalfVolume());
+	//CudaRNG1 *rngv = new CudaRNG1(seed, Volume());
+	
 	if(hotstart){
 		HotStart(lattice, rng);
 	}
@@ -296,9 +299,11 @@ int main(){
       
     vector<double> plaq_corr;
 	int mininter = 700;
+	vector<Array<complexd>*> data;
 	for(PARAMS::iter = 1; PARAMS::iter <= maxIter; ++PARAMS::iter){
 		// metropolis and overrelaxation algorithm 
 		UpdateLattice(lattice, rng,  PARAMS::metrop, PARAMS::ovrn);
+		//UpdateLattice(lattice, rngv, PARAMS::metrop, PARAMS::ovrn);
 		
 		if((PARAMS::iter%printiter)==0){
 			Plaquette(lattice, plaqv);
@@ -308,6 +313,122 @@ int main(){
 			cout << "L: " << ployv.real() << '\t' << ployv.imag() << "\t|L|: " << ployv.abs() << endl;
 			fileout1 << PARAMS::iter << '\t' << ployv.real() << '\t' << ployv.imag() << "\t|L|: " << ployv.abs() << endl;
 		}
+		if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
+			Array<complexd> *fmunu_vol, *fmunu;
+			Fmunu(lattice, &fmunu_vol, &fmunu);
+			delete fmunu_vol;
+			delete fmunu;
+		}
+		
+			
+		if(1)if( PARAMS::iter >= 1 && (PARAMS::iter%printiter)==0){
+			if(0){
+				cout << "########### P(0)*conj(P(r))O_munu Using MultiLevel #####################" << endl;
+				Timer p2;
+				p2.start();
+				int radius = 8;
+				CudaRNG *rng11 = new CudaRNG(seed, HalfVolume());
+				for(int radius = 2; radius <= 8; radius++){
+					bool SquaredField = true;
+					bool alongCharges = false; 
+					bool symmetrize = false;
+					int perpPoint = 0;
+					Array<complexd>* res0 = MultiLevelTTO(lattice, rng11, 5, 16, 5, 5, 2, 5, radius, SquaredField, alongCharges, symmetrize, perpPoint);
+					delete res0;
+				}
+				delete rng11;
+				p2.stop();
+				std::cout << "p2: " << p2.getElapsedTime() << " s" << endl;
+				cout << "################################" << endl;	
+			}
+			if(0){
+				Timer p2;p2.start();
+				int radius = 8;
+				CudaRNG *rng11 = new CudaRNG(seed, HalfVolume());
+				for(int radius = 2; radius <= 8; radius++){
+					bool SquaredField = true;
+					bool alongCharges = false; 
+					bool symmetrize = false;
+					int perpPoint = 0;
+					Array<complexd>* res0 = ML_TTO_generic::MultiLevelTTO(lattice, rng11, 2, 4, 5, 16, 5, 5, 2, 5, radius, SquaredField, alongCharges, symmetrize, perpPoint);
+					delete res0;
+				}
+				delete rng11;
+				p2.stop();
+				std::cout << "p2: " << p2.getElapsedTime() << " s" << endl;
+				cout << "################################" << endl;	
+			}
+			
+		
+			if(0){
+				cout << "########### P(0)*conj(P(r)) Using MultiLevel #####################" << endl;
+				int Rmax = Grid(0)/2;
+				CudaRNG *rng11 = new CudaRNG(seed, HalfVolume());
+				Array<complexd>* results;
+				Array<complexd> *pp;
+				Array<complexd>*ppfield;
+				//results = MultiLevel(lattice, rng, 1000, 20, 200, 5, 1, 3, Rmax, false);
+				results = MultiLevel(lattice, rng11, 2, 20, 20, 5, 1, 3, Rmax, false);
+				//MultiLevelField(lattice, rng11, &pp, &ppfield, 2, 20, 20, 5, 1, 3, Rmax, false);
+				delete rng11;
+				
+				cout << "################################" << endl;	
+				rng11 = new CudaRNG(seed, HalfVolume());
+				Array<complexd>* rresults = MLgeneric::MultiLevel(lattice, rng11, 2, 4, 2, 20, 20, 5, 1, 3, Rmax, false);
+				delete rng11;
+				break;
+				data.push_back(results);
+				//delete results;
+				cout << "################################" << endl;	
+				cout << "############ MEAN ##############" << endl;
+				Array<double> mean( Host, results->Size());
+				for(int i = 0; i < data.size(); i++){
+					Array<complexd>* val = data.at(i);
+					for(int r = 0; r < mean.Size(); r++) 
+						mean(r) += val->at(r).real();
+				}
+				
+				vector<double> *trials = new vector<double>[results->Size()];
+				for(int i = 0; i < data.size(); i++){
+					Array<complexd>* val = data.at(i);
+					for(int r = 0; r < mean.Size(); r++) {
+						double vr = -log(mean(r)-val->at(r).real())/double(Grid(TDir()));
+						trials[r].push_back(vr);
+					}
+				}			
+				
+				for(int r = 0; r < mean.Size(); r++){ 
+					mean(r) /= double(data.size());
+					mean(r) = -log(mean(r))/double(Grid(TDir()));
+				}
+					
+				double jackfactor = double(data.size()-1)/double(data.size());
+				Array<double> jackerr( Host, results->Size());
+				for(int r = 0; r < mean.Size(); r++){
+					double jackmean = 0.0;
+					for(int i = 0; i < trials[r].size(); i++){
+						jackmean += trials[r][i];//.at(i);
+					}
+					jackmean /= double(trials[r].size());
+					double jack = 0.0;
+					for(int i = 0; i < trials[r].size(); i++){
+						double tmp = trials[r][i] - jackmean;
+						jack += tmp * tmp;
+					}
+					jackerr(r) = sqrt(jack * jackfactor);
+				}	
+					
+				cout << "# of configs: " << data.size() << endl;
+				for(int r = 0; r < mean.Size(); r++) {
+					cout << r+1 << '\t' << mean(r) << '\t' << jackerr(r) << endl;			
+				}
+				cout << "################################" << endl;	
+			}
+		}
+		
+		
+		
+		
 
 
 		if(0)if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
@@ -457,6 +578,10 @@ int main(){
 	}
 	fileout.close();
 	fileout1.close();
+	for(int i = 0; i < data.size(); i++){
+		Array<complexd>* val = data.at(i);
+		delete val;
+	}
 	
 	delete lattice;
 	delete rng;

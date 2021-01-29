@@ -31,11 +31,12 @@ using namespace std;
 
 namespace U1{
 
-namespace ML_TTO{
+namespace ML_TTO_generic{
 
 
-#include "multilevel_common.cuh"
 
+
+#include "multilevel_generic_common.cuh"
 
 
 //Defined only for charges along z direction
@@ -139,19 +140,19 @@ inline __host__ __device__ void GetFields(const complexd *plaqfield, int pos, in
 }
 
 
-__global__ void kernel_l2_multilevel_1(complexd *plaqfield, complexd *poly, complexd *l2, complexd *lo2, int radius, bool SquaredField, bool alongCharges, int perpPoint){
+__global__ void kernel_l2_multilevel_1(complexd *plaqfield, complexd *poly, complexd *l2, complexd *lo2, int radius, int nl0, bool SquaredField, bool alongCharges, int perpPoint){
     size_t id = threadIdx.x + blockDim.x * blockIdx.x;    
 	if(id >= SpatialVolume()) return;		
 	int x[4];
 	indexNOSD(id, x);
 	
-	int nl2 = Grid(TDir())/2;
+	int nl2 = Grid(TDir())/nl0;
 	for(int dir = 0; dir < TDir(); dir++){		
 		int layer = 0;
-		for(int t = 0; t < Grid(TDir()); t+=2){
+		for(int t = 0; t < Grid(TDir()); t+=nl0){
 			complexd pl0 = 1.;
 			complexd pl1 = 1.;
-			for(x[TDir()] = t; x[TDir()] < t+2; ++x[TDir()]){
+			for(x[TDir()] = t; x[TDir()] < t+nl0; ++x[TDir()]){
 				pl0 *= (poly[(((x[3] * Grid(2) + x[2]) * Grid(1)) + x[1] ) * Grid(0) + x[0]]);
 				int xold = x[dir];
 				x[dir] = (x[dir] + radius) % Grid(dir);
@@ -161,7 +162,7 @@ __global__ void kernel_l2_multilevel_1(complexd *plaqfield, complexd *poly, comp
 			}			
 			complexd pl = pl0 * pl1;
 			
-			for(int tt = 0; tt < 2; ++tt)
+			for(int tt = 0; tt < nl0; ++tt)
 			for(int iz = 0; iz < Grid(0); ++iz){	
 				complexd plaq = 1.0;
 				x[TDir()] = t + tt;				
@@ -208,10 +209,10 @@ __global__ void kernel_l2_multilevel_1(complexd *plaqfield, complexd *poly, comp
 						field[fi].real() = 0.0;
 				}
 				int idout = id + SpatialVolume() * dir + SpatialVolume() * (Dirs()-1) * layer;
-				idout +=  SpatialVolume() * (Dirs()-1) * nl2 * tt + SpatialVolume() * (Dirs()-1) * nl2 * 2 * iz;
+				idout +=  SpatialVolume() * (Dirs()-1) * nl2 * tt + SpatialVolume() * (Dirs()-1) * nl2 * nl0 * iz;
 				for(int fi = 0; fi < 6; fi++){
 					field[fi] = pl * field[fi];
-					int idout1 = idout + SpatialVolume() * (Dirs()-1) * nl2 * 2 * Grid(0) * fi;
+					int idout1 = idout + SpatialVolume() * (Dirs()-1) * nl2 * nl0 * Grid(0) * fi;
 					lo2[idout1] += field[fi];
 				}
 			}					
@@ -253,6 +254,7 @@ private:
 	Array<complexd> *l2;
 	Array<complexd> *lo2;
 	size_t sl2;
+	int nl0;
 	int radius;
 	int size;
 	int perpPoint;
@@ -270,10 +272,10 @@ private:
    unsigned int minThreads() const { return size; }
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-	kernel_l2_multilevel_1<<<tp.grid, tp.block, tp.shared_bytes, stream>>>(plaqfield->getPtr(), poly->getPtr(), l2->getPtr(), lo2->getPtr(), radius, SquaredField, alongCharges, perpPoint);
+	kernel_l2_multilevel_1<<<tp.grid, tp.block, tp.shared_bytes, stream>>>(plaqfield->getPtr(), poly->getPtr(), l2->getPtr(), lo2->getPtr(), radius, nl0, SquaredField, alongCharges, perpPoint);
 }
 public:	
-   L2ML(Array<complexd> *plaqfield, Array<complexd> *poly, Array<complexd> *l2, Array<complexd> *lo2, size_t sl2, int radius, bool SquaredField, bool alongCharges, int perpPoint) : plaqfield(plaqfield), poly(poly), l2(l2), lo2(lo2), sl2(sl2), radius(radius), SquaredField(SquaredField), alongCharges(alongCharges), perpPoint(perpPoint) {
+   L2ML(Array<complexd> *plaqfield, Array<complexd> *poly, Array<complexd> *l2, Array<complexd> *lo2, size_t sl2, int radius, int nl0, bool SquaredField, bool alongCharges, int perpPoint) : plaqfield(plaqfield), poly(poly), l2(l2), lo2(lo2), sl2(sl2), radius(radius), nl0(nl0), SquaredField(SquaredField), alongCharges(alongCharges), perpPoint(perpPoint) {
 	size = SpatialVolume();
 	timesec = 0.0;  
 }
@@ -328,7 +330,7 @@ public:
 
 
 
-__global__ void kernel_l2avg_l4_multilevel(complexd *dev_l2, complexd *dev_lo2, complexd *dev_l4, complexd *dev_lo4, double l2norm){
+__global__ void kernel_l2avg_l4_multilevel(complexd *dev_l2, complexd *dev_lo2, complexd *dev_l4, complexd *dev_lo4, double l2norm, int nl0, int nl1){
 
     size_t id = threadIdx.x + blockDim.x * blockIdx.x;
     size_t size = SpatialVolume() * (Dirs()-1);
@@ -336,26 +338,35 @@ __global__ void kernel_l2avg_l4_multilevel(complexd *dev_l2, complexd *dev_lo2, 
     
     
     //T4 and T04 calculus
-	int nl2 = Grid(TDir())/2;
-	int nl4 = Grid(TDir())/4;
+	int nl2 = Grid(TDir())/nl0;
+	int nl4 = Grid(TDir())/nl1;
+	int l1 = nl1/nl0;
 	int l4 = 0;
-	for(int l2 = 0; l2 < nl2; l2+=2){
+	for(int l2 = 0; l2 < nl2; l2+=l1){
 		
-		complexd t2[2];
-		t2[0] = dev_l2[id + size * (l2 + 1)] * l2norm;
-		t2[1] = dev_l2[id + size * l2] * l2norm;
-		complexd pl0 = t2[1] * t2[0];
+		complexd pl0 = 1.;
+		for(int l0 = 0; l0 < l1; ++l0){
+			int layer = l2 + l0;
+			pl0 *= dev_l2[id + size * layer] * l2norm;
+		}
 		dev_l4[id + size * l4] += pl0;
 		
-		for(int l0 = 0; l0 < 2; ++l0){
+		for(int l0 = 0; l0 < l1; ++l0){
 			int layer = l2 + l0;
-						
-			for(int tt = 0; tt < 2; ++tt)
+			
+			
+			complexd pl1 = 1.;
+			for(int l00 = 0; l00 < l1; ++l00){
+			 if(l0!=l00) pl1 *= dev_l2[id + size * (l2 + l00)] * l2norm;
+			}
+			
+			for(int tt = 0; tt < nl0; ++tt)
 			for(int iz = 0; iz < Grid(0); ++iz) {	
-				int posin = id + size * layer + size * nl2 * tt + size * nl2 * 2 * iz;
-				int posout = id + size * l4 + size * nl4 * l0 + size * nl4 * 2 * tt + size * nl4 * 4 * iz;
+				//NEED TO CHECK THIS PART!!!!!!!!
+				int posin = id + size * layer + size * nl2 * tt + size * nl2 * nl0 * iz;
+				int posout = id + size * l4 + size * nl4 * l0 + size * nl4 * nl0 * tt + size * nl4 * nl0 * l1 * iz;
 				for(int fi = 0; fi < 6; fi++){
-					complexd pl = t2[l0] * dev_lo2[posin + size * nl4 * 4 * Grid(0) * fi] * l2norm;
+					complexd pl = pl1 * dev_lo2[posin + size * nl4 * nl0 * l1 * Grid(0) * fi] * l2norm;
 					dev_lo4[posout + size * nl4 * 4 * Grid(0) * fi] += pl;
 				}
 			}
@@ -372,6 +383,8 @@ private:
 	Array<complexd> *lo2;
 	Array<complexd> *lo4;
 	double l2norm;
+	int nl0;
+	int nl1;
 	size_t sl4;
 	int size;
 	double timesec;
@@ -386,10 +399,10 @@ private:
    unsigned int minThreads() const { return size; }
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-	kernel_l2avg_l4_multilevel<<<tp.grid, tp.block, 0, stream>>>(l2->getPtr(), lo2->getPtr(), l4->getPtr(), lo4->getPtr(), l2norm);
+	kernel_l2avg_l4_multilevel<<<tp.grid, tp.block, 0, stream>>>(l2->getPtr(), lo2->getPtr(), l4->getPtr(), lo4->getPtr(), l2norm, nl0, nl1);
 }
 public:	
-   L2AvgL4ML(Array<complexd> *l2, Array<complexd> *lo2, Array<complexd> *l4, Array<complexd> *lo4, size_t sl4, double l2norm) : l2(l2),lo2(lo2), l4(l4), lo4(lo4), sl4(sl4), l2norm(l2norm) {
+   L2AvgL4ML(Array<complexd> *l2, Array<complexd> *lo2, Array<complexd> *l4, Array<complexd> *lo4, size_t sl4, double l2norm, int nl0, int nl1) : l2(l2),lo2(lo2), l4(l4), lo4(lo4), sl4(sl4), l2norm(l2norm), nl0(nl0), nl1(nl1) {
 	size = SpatialVolume() * Grid(0) * (Dirs()-1);
 	timesec = 0.0;  
 }
@@ -441,12 +454,13 @@ public:
 };
 
 
-__global__ void kernel_l4avg_Final_multilevel(complexd *dev_l4, complexd *dev_lo4, complexd *dev_pp, complexd *dev_ppo, double norm){
+__global__ void kernel_l4avg_Final_multilevel(complexd *dev_l4, complexd *dev_lo4, complexd *dev_pp, complexd *dev_ppo, double norm, int nl0, int nl1){
     size_t id = threadIdx.x + blockDim.x * blockIdx.x;    				
 	
-	int nl4 = Grid(TDir())/4;	
-    //int size = SpatialVolume()
+	int nl4 = Grid(TDir())/nl1;	
     int size = SpatialVolume() * (Dirs()-1);
+    
+	int l1 = nl1/nl0;
 	
 	for(int fi = 0; fi < 6; fi++)
 	for(int iz = 0; iz < Grid(0); ++iz) {
@@ -464,10 +478,10 @@ __global__ void kernel_l4avg_Final_multilevel(complexd *dev_l4, complexd *dev_lo
 				}
 				pl *= pl0;
 				 
-				for(int t0 = 0; t0 < 2; ++t0)
-				for(int t1 = 0; t1 < 2; ++t1){			
-					int pos0 = pos + size * nl4 * t0 + size * nl4 * 2 * t1 + size * nl4 * 4 * iz;
-					pos0 += size * nl4 * 4 * Grid(0) * fi;
+				for(int t0 = 0; t0 < nl0; ++t0)
+				for(int t1 = 0; t1 < l1; ++t1){			
+					int pos0 = pos + size * nl4 * t0 + size * nl4 * nl0 * t1 + size * nl4 * nl0 * l1 * iz;
+					pos0 += size * nl4 * nl0 * l1 * Grid(0) * fi;
 					complexd pp0 = dev_lo4[pos0] * norm;
 					ppo += pl1 * pp0;
 				}
@@ -491,6 +505,8 @@ private:
 	Array<complexd> *dev_ppo;
 	double norm_pp, norm_ppo;
 	double l4norm;
+	int nl0;
+	int nl1;
 	int size;
 	double timesec;
 #ifdef TIMMINGS
@@ -506,13 +522,13 @@ private:
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
 	dev_pp->Clear();
 	dev_ppo->Clear();
-	kernel_l4avg_Final_multilevel<<<tp.grid, tp.block, tp.shared_bytes, stream>>>(l4->getPtr(), lo4->getPtr(), dev_pp->getPtr(), dev_ppo->getPtr(), l4norm);
+	kernel_l4avg_Final_multilevel<<<tp.grid, tp.block, tp.shared_bytes, stream>>>(l4->getPtr(), lo4->getPtr(), dev_pp->getPtr(), dev_ppo->getPtr(), l4norm, nl0, nl1);
 }
 public:
 	Array<complexd> *pp;
 	Array<complexd> *ppo;
 	
-   L4AvgPP(Array<complexd> *l4, Array<complexd> *lo4, double l4norm) : l4(l4), lo4(lo4), l4norm(l4norm) {
+   L4AvgPP(Array<complexd> *l4, Array<complexd> *lo4, double l4norm, int nl0, int nl1) : l4(l4), lo4(lo4), l4norm(l4norm), nl1(nl1), nl0(nl0) {
 	size = SpatialVolume() * (Dirs()-1);
 	dev_pp = new Array<complexd>(Device, 1);
 	dev_ppo = new Array<complexd>(Device, Grid(0)*6);
@@ -695,7 +711,12 @@ public:
 
 
 
-Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int n4, int k4, int n2, int k2, int metrop, int ovrn, int radius, bool SquaredField, bool alongCharges, bool symmetrize, int perpPoint){
+Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int nl0, int nl1, int n4, int k4, int n2, int k2, int metrop, int ovrn, int radius, bool SquaredField, bool alongCharges, bool symmetrize, int perpPoint){
+	Timer a0; a0.start();
+	if( Grid(TDir())%nl1 != 0  || Grid(TDir())%nl0 != 0  || nl1%nl0 != 0 ) {
+		cout << "Error: Cannot Apply MultiLevel Algorithm...\nExiting..." << endl;
+		exit(1);
+	}
 	if(Dirs() < 4){
 		cout << "Only implemented for 4D lattice..." << endl;
 		Finalize(1);
@@ -716,32 +737,31 @@ Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int n4, i
 	Array<double>* dev_lat = new Array<double>(Device);
 	dev_lat->Copy(lat);
 
-	int nl2 = Grid(TDir())/2;
+	int nl2 = Grid(TDir())/nl0;
 	int sl2 = nl2*(Dirs()-1)*SpatialVolume();
 	Array<complexd> *l2 = new Array<complexd>(Device, sl2);
 	int slo2 = (Dirs()-1)*Grid(0)*Grid(0)*6*SpatialVolume();
 	Array<complexd> *lo2 = new Array<complexd>(Device, slo2);
-	int nl4 = Grid(TDir())/4;
+	int nl4 = Grid(TDir())/nl1;
 	size_t sl4 = nl4*(Dirs()-1)*SpatialVolume();
 	Array<complexd> *l4 = new Array<complexd>(Device, sl4);
 	size_t slo4 = Grid(0)*6*(Dirs()-1)*Grid(0)*SpatialVolume();
 	Array<complexd> *lo4 = new Array<complexd>(Device, slo4);
 	
-	// metropolis and overrelaxation algorithm
-	Metropolis_ML<4> mtp4(dev_lat, rng_state, metrop);
-	OverRelaxation_ML<4> ovr4(dev_lat, ovrn);
 	
-	Metropolis_ML<2> mtp2(dev_lat, rng_state, metrop);
-	OverRelaxation_ML<2> ovr2(dev_lat, ovrn);
+	// metropolis and overrelaxation algorithm
+	Metropolis_ML mtp(dev_lat, rng_state);
+	OverRelaxation_ML ovr(dev_lat);
+		
 	
 	const bool multihit = true;
 	Polyakov_Volume<multihit> mhitVol(dev_lat);
 	Array<complexd>* dev_mhit;
 	
 	double l2norm = 1./double(n2);
-	L2AvgL4ML l2avgl4(l2, lo2, l4, lo4, sl4, l2norm);
+	L2AvgL4ML l2avgl4(l2, lo2, l4, lo4, sl4, l2norm, nl0, nl1);
 	double l4norm = 1./double(n4);
-	L4AvgPP l4avgpp(l4,lo4, l4norm);
+	L4AvgPP l4avgpp(l4, lo4, l4norm, nl0, nl1);
 	
 	PlaqFields plaqf(dev_lat);
 	
@@ -751,23 +771,23 @@ Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int n4, i
 		cout << "Iter of l4: " << i << endl;
 		//Update the lattice k4 times freezing spacial links in layers with t multiple of 4
 		for(int j = 0; j < k4; ++j){
-			mtp4.Run();
-			ovr4.Run();
+			mtp.Run(metrop, nl1);
+			ovr.Run(ovrn, nl1);
 		}
 		l2->Clear();
 		lo2->Clear();
 		for(int k = 0; k < n2; ++k){		
 			//Update the lattice k2 times freezing spacial links in layers with t multiple of 2
 			for(int l = 0; l < k2; ++l){
-				mtp2.Run();
-				ovr2.Run();	
+				mtp.Run(metrop, nl0);
+				ovr.Run(ovrn, nl0);	
 			}
 			//Extract plaquette components and mean plaquette components
 			Array<complexd>* plaqfield = plaqf.Run();
 			//Extract temporal links and apply MultiHit
 			dev_mhit = mhitVol.Run();			
 			//Calculate tensor T2
-			L2ML l2ml(plaqfield, dev_mhit, l2, lo2, sl2, radius, SquaredField, alongCharges, perpPoint);
+			L2ML l2ml(plaqfield, dev_mhit, l2, lo2, sl2, radius, nl0, SquaredField, alongCharges, perpPoint);
 			l2ml.Run();
 		}
 		//Average tensor T2 and Calculate tensor T4
@@ -776,7 +796,7 @@ Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int n4, i
 		
 		if(0){
 			double l4norm1 = 1./double(i+1);
-			L4AvgPP l4avgpp1(l4, lo4, l4norm1);
+			L4AvgPP l4avgpp1(l4, lo4, l4norm1, nl0, nl1);
 			Array<complexd>* res = l4avgpp1.Run();
 			cout << res << endl;
 			delete res;
@@ -853,8 +873,8 @@ Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int n4, i
 
 }
 
-Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int n4, int k4, int n2, int k2, int metrop, int ovrn, int radius, bool SquaredField, bool alongCharges, bool symmetrize, int perpPoint){
-	return ML_TTO::MultiLevelTTO(lat, rng_state, n4, k4, n2, k2, metrop, ovrn, radius, SquaredField, alongCharges, symmetrize, perpPoint);
+Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int nl0, int nl1, int n4, int k4, int n2, int k2, int metrop, int ovrn, int radius, bool SquaredField, bool alongCharges, bool symmetrize, int perpPoint){
+	return ML_TTO_generic::MultiLevelTTO(lat, rng_state, nl0, nl1, n4, k4, n2, k2, metrop, ovrn, radius, SquaredField, alongCharges, symmetrize, perpPoint);
 }
 
 }

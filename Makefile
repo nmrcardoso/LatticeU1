@@ -9,7 +9,7 @@ INC_LIBS =
 
 
 
-GCC ?= g++
+GCC ?= g++ -g
 # -std=c++11
 
 
@@ -21,7 +21,7 @@ CUDA_LIB_PATH  ?= $(CUDA_PATH)/lib64
 GENCODE_FLAGS = -arch=$(GPU_ARCH)
 LDFLAGS   := -L$(CUDA_LIB_PATH) -lcudart  -lcuda -lcurand
 CCFLAGS   :=  -O3 -I$(CUDA_INC_PATH)/
-NVCC      ?= $(CUDA_BIN_PATH)/nvcc
+NVCC      ?= $(CUDA_BIN_PATH)/nvcc -g
 
 
 COMP_CAP = $(GPU_ARCH:sm_%=%0)
@@ -40,7 +40,7 @@ HASH = \"cpu_arch=$(strip $(OS_ARCH)),gpu_arch=$(strip $(GPU_ARCH)),cuda_version
 
 all : directories $(PROJECTNAME)
 
-OBJS := timer.o alloc.o parameters.o random.o update.o multilevel.o plaquette.o polyakov.o tune.o cuda_error_check.o actime.o plaquette_comps.o chromofieldPP.o chromofieldWL.o multilevel_TTO.o convertOrder.o smearing.o wilsonloop.o ../u1.o
+OBJS := timer.o alloc.o parameters.o random.o update.o plaquette.o polyakov.o tune.o cuda_error_check.o actime.o plaquette_comps.o chromofieldPP.o chromofieldWL.o convertOrder.o smearing.o wilsonloop.o Fmunu.o multilevel.o multilevel_generic.o  multilevel_TTO.o  multilevel_TTO_generic.o ../u1.o
 
 INCS:= include
 U1OBJS  := $(patsubst %.o,$(OBJDIR)/%.o,$(OBJS))

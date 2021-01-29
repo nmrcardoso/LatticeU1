@@ -85,6 +85,8 @@ class Array{
 				break;
 				case Device:
 					cudaSafeCall(cudaMemset(ptr, 0, size*sizeof(Real)));
+				case Managed:
+					cudaSafeCall(cudaMemset(ptr, 0, size*sizeof(Real)));
 				break;
 			}
 		}	
@@ -168,6 +170,10 @@ class Array{
 				*ptr_in = (Real*)dev_malloc(insize*sizeof(Real));
 				if(getVerbosity() >= DEBUG_VERBOSE) std::cout << "Allocate array " << *ptr_in << " in Device with: " << float(insize*sizeof(Real))/1048576. << " MB" << std::endl;
 			break;
+			case Managed:
+				*ptr_in = (Real*)managed_malloc(insize*sizeof(Real));
+				if(getVerbosity() >= DEBUG_VERBOSE) std::cout << "Allocate array " << *ptr_in << " in Managed with: " << float(insize*sizeof(Real))/1048576. << " MB" << std::endl;
+			break;
 		}	
 	}
 	void Release(Real **ptr_in, StoreMode loc){
@@ -180,6 +186,10 @@ class Array{
 				case Device:
 					if(getVerbosity() >= DEBUG_VERBOSE) std::cout << "Release array " << *ptr_in << " in Device" << std::endl;
 					dev_free(*ptr_in);
+				break;
+				case Managed:
+					if(getVerbosity() >= DEBUG_VERBOSE) std::cout << "Release array " << *ptr_in << " in Managed" << std::endl;
+					managed_free(*ptr_in);
 				break;
 			}
 			*ptr_in = 0;

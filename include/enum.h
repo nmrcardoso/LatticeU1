@@ -27,7 +27,8 @@ typedef enum TuneMode_S {
 
 typedef enum StoreMode_S {
     Host,
-    Device
+    Device,
+    Managed
 } StoreMode;
 
 
@@ -37,6 +38,7 @@ typedef enum MemoryType_s {
 	ALLOC_MEMORY_DEVICE,
 	ALLOC_MEMORY_PINNED,
 	ALLOC_MEMORY_MAPPED,
+	ALLOC_MEMORY_MANAGED,
 	ALLOC_MEMORY_INVALID = ALLOC_INVALID_ENUM
 } MemoryType;
 
@@ -67,6 +69,9 @@ inline cudaMemcpyKind GetMemcpyKind(const StoreMode in, const StoreMode out){
         case Device:
             cptype = cudaMemcpyHostToDevice;
             break;
+        case Managed:
+            cptype = cudaMemcpyHostToDevice;
+            break;
         }
         break;
     case Device: 
@@ -75,6 +80,22 @@ inline cudaMemcpyKind GetMemcpyKind(const StoreMode in, const StoreMode out){
             cptype = cudaMemcpyDeviceToHost;
             break;
         case Device:
+            cptype = cudaMemcpyDeviceToDevice;
+            break;
+        case Managed:
+            cptype = cudaMemcpyDeviceToDevice;
+            break;
+        }
+        break;			
+    case Managed: 
+        switch( out ) {
+        case Host:
+            cptype = cudaMemcpyDeviceToHost;
+            break;
+        case Device:
+            cptype = cudaMemcpyDeviceToDevice;
+            break;
+        case Managed:
             cptype = cudaMemcpyDeviceToDevice;
             break;
         }

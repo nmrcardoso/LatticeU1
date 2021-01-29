@@ -87,7 +87,7 @@ InlineHostDevice int indexNO_neg(const int id, const int mu, const int lmu, cons
 
 
 
-InlineHostDevice void indexNOSD(const int id, int x[3]){
+InlineHostDevice void indexNOSD(const int id, int x[]){
 	x[2] = (id/(Grid(0) * Grid(1))) % Grid(2);
 	x[1] = (id/Grid(0)) % Grid(1);
 	x[0] = id % Grid(0);

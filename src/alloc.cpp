@@ -163,7 +163,7 @@ namespace U1 {
 		cudaSafeCall(cudaGetDevice( &dev));
 		cudaGetDeviceProperties(&deviceProp, dev);
 
-        if (deviceProp.major < 6) printfU1("Warning: Using managed memory on pre-Pascal architecture is limited");
+        if (deviceProp.major < 6) printfU1("Warning: Using managed memory on pre-Pascal architecture is limited\n");
       }
 
       init = true;

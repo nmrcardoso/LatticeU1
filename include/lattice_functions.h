@@ -24,57 +24,6 @@
 namespace U1{
 
 
-inline __device__ __host__ complexd Fmunu(const double *lat, const int id, const int parity, const int mu, const int nu) {
-	complexd F = 0.0;
-	double plaq = lat[id + parity * HalfVolume() + mu * Volume()];
-	int idmu1 = indexEO_neg(id, parity, mu, 1);
-	plaq += lat[idmu1 + Volume() * nu];
-	plaq -= lat[indexEO_neg(id, parity, nu, 1) + Volume() * mu];
-	plaq -= lat[id + parity * HalfVolume() + nu * Volume()];
-	F += exp_ir(plaq);
-	
-	plaq = lat[id + parity * HalfVolume() + nu * Volume()];
-	idmu1 = indexEO_neg(id, parity, nu, 1, mu, -1);
-	plaq -= lat[idmu1 + Volume() * mu];
-	idmu1 = indexEO_neg(id, parity, mu, -1);
-	plaq -= lat[idmu1 + Volume() * nu];
-	plaq += lat[idmu1 + mu * Volume()];
-	F += exp_ir(plaq);	
-	
-	idmu1 = indexEO_neg(id, parity, mu, -1);
-	plaq = -lat[idmu1 + mu * Volume()];
-	idmu1 = indexEO_neg(id, parity, nu, -1, mu, -1);
-	plaq -= lat[idmu1 + Volume() * nu];
-	plaq += lat[idmu1 + Volume() * mu];
-	idmu1 = indexEO_neg(id, parity, nu, -1);
-	plaq += lat[idmu1 + Volume() * nu];
-	F += exp_ir(plaq);
-	
-	//idmu1 = indexEO_neg(id, parity, nu, -1);
-	plaq = -lat[idmu1 + Volume() * nu];
-	plaq += lat[idmu1 + Volume() * mu];
-	idmu1 = indexEO_neg(id, parity, nu, -1, mu, 1);
-	plaq += lat[idmu1 + Volume() * nu];
-	plaq -= lat[id + parity * HalfVolume() + mu * Volume()];
-	F += exp_ir(plaq);
-	
-	F -= conj(F);
-	F *= 0.125;	
-	
-	return F;
-}
-
-inline   __device__ __host__ void Fmunu(const double *lat, complexd *fmunu, const int id, const int parity){
-  fmunu[0] += Fmunu( lat, id, parity, 0, 3 );
-  fmunu[1] += Fmunu( lat, id, parity, 1, 3 );
-  fmunu[2] += Fmunu( lat, id, parity, 2, 3 );
-  fmunu[3] += Fmunu( lat, id, parity, 1, 2 );
-  fmunu[4] += Fmunu( lat, id, parity, 2, 0 );
-  fmunu[5] += Fmunu( lat, id, parity, 0, 1 );
-}
-
-
-
 
 
 inline __device__ __host__ complexd PlaquetteF(const double *lat, const int id, const int parity, const int mu, const int nu) {
@@ -141,17 +90,12 @@ InlineHostDevice double OvrFunc(double *lat, const int id, const int parity, con
 
 
 InlineHostDevice complexd MultiHit(const double *lat, const int id, const int parity, const int mu){
-	complexd staple = Staple(lat, id, parity, mu);				
-	double alpha = staple.abs();
-	double ba = Beta() * alpha;
-	double temp = cyl_bessel_i1(ba)/(cyl_bessel_i0(ba)*alpha);
-	//double temp = besseli1(ba)/(besseli0(ba)*alpha);
-	complexd val(temp * staple.real(), -temp * staple.imag());
-	return val;
-}
-
-InlineHostDevice complexd MultiHit(const complexd *lat, const int id, const int parity, const int mu){
-	complexd staple = Staple(lat, id, parity, mu);				
+	/*double W_re, W_im;	
+	staple(lat, id, parity, TDir(), W_re, W_im);			
+	double alpha = sqrt(W_re*W_re+W_im*W_im);
+	double ba = Beta() * alpha;*/
+	
+	complexd staple = Staple(lat, id, parity, TDir());				
 	double alpha = staple.abs();
 	double ba = Beta() * alpha;
 	double temp = cyl_bessel_i1(ba)/(cyl_bessel_i0(ba)*alpha);

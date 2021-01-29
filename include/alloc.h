@@ -46,15 +46,6 @@ namespace U1 {
   void dev_free_(const char *func, const char *file, int line, void *ptr);
   void dev_pinned_free_(const char *func, const char *file, int line, void *ptr);
   void host_free_(const char *func, const char *file, int line, void *ptr);
-  void *managed_malloc_(const char *func, const char *file, int line, size_t size);
-  void managed_free_(const char *func, const char *file, int line, void *ptr);
-  
-    /*
-    @brief Get device view of a host-mapped pointer
-   */
-  void *get_mapped_device_pointer_(const char *func, const char *file, int line, const void *ptr);
-
-
 
   // strip path from __FILE__
   inline constexpr const char* str_end(const char *str) { return *str ? str_end(str + 1) : str; }
@@ -74,9 +65,6 @@ namespace U1 {
 #define dev_free(ptr) U1::dev_free_(__func__, U1::file_name(__FILE__), __LINE__, ptr)
 #define dev_pinned_free(ptr) U1::dev_pinned_free_(__func__, U1::file_name(__FILE__), __LINE__, ptr)
 #define host_free(ptr) U1::host_free_(__func__, U1::file_name(__FILE__), __LINE__, ptr)
-#define managed_malloc(size) U1::managed_malloc_(__func__, U1::file_name(__FILE__), __LINE__, size)
-#define managed_free(ptr) U1::managed_free_(__func__, U1::file_name(__FILE__), __LINE__, ptr)
-#define get_mapped_device_pointer(ptr) U1::get_mapped_device_pointer_(__func__, U1::file_name(__FILE__), __LINE__, ptr)
 
 
 

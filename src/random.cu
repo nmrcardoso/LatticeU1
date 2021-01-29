@@ -36,8 +36,4 @@ cuRNGState* Init_Device_RNG(int seed, size_t size){
 }
 
 
-
-
-
-
 }

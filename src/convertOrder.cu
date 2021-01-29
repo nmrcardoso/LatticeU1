@@ -29,8 +29,8 @@ using namespace std;
 namespace U1{
 
 
-template<class Real, bool EO_TO_NO_ORDER>
-__global__ void kernel_convert_EO_NO(const Real *in, Real *out){
+template<bool EO_TO_NO_ORDER>
+__global__ void kernel_convert_EO_NO(const double *in, double *out){
 	size_t id = threadIdx.x + blockDim.x * blockIdx.x;
 	if( id >= Volume() ) return;
 	if(EO_TO_NO_ORDER){
@@ -54,7 +54,7 @@ __global__ void kernel_convert_EO_NO(const Real *in, Real *out){
 		size_t idx = indexId(x) >> 1;
 		int parity = GetParity(x);
 		for(int dir = 0; dir < Dirs(); dir++){
-			out[idx + parity * HalfVolume() + dir * Volume()] = in[id + dir * Volume()];
+			out[id + parity * HalfVolume() + dir * Volume()] = in[idx + dir * Volume()];
 		}
 
 
@@ -63,12 +63,12 @@ __global__ void kernel_convert_EO_NO(const Real *in, Real *out){
 }
 
 
-template<class Real, bool EO_TO_NO_ORDER>
+template<bool EO_TO_NO_ORDER>
 class ConvLattice_EO_NO: Tunable{
 public:
 private:
-	Array<Real>* lat;
-	Array<Real>* latno;
+	Array<double>* lat;
+	Array<double>* latno;
 	int size;
 	double timesec;
 #ifdef TIMMINGS
@@ -82,16 +82,16 @@ private:
    unsigned int minThreads() const { return size; }
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-	kernel_convert_EO_NO<Real, EO_TO_NO_ORDER><<<tp.grid, tp.block, 0, stream>>>(lat->getPtr(), latno->getPtr());
+	kernel_convert_EO_NO<EO_TO_NO_ORDER><<<tp.grid, tp.block, 0, stream>>>(lat->getPtr(), latno->getPtr());
 }
 public:
-   ConvLattice_EO_NO(Array<Real>* lat) : lat(lat) {
+   ConvLattice_EO_NO(Array<double>* lat) : lat(lat) {
    	size = Volume();
-	latno = new Array<Real>(Device, lat->Size());
+	latno = new Array<double>(Device, Dirs()*size);
 	timesec = 0.0;  
 }
    ~ConvLattice_EO_NO(){ };
-   Array<Real>* Run(const cudaStream_t &stream){
+   Array<double>* Run(const cudaStream_t &stream){
 #ifdef TIMMINGS
     time.start();
 #endif
@@ -105,13 +105,13 @@ public:
 #endif
 	return latno;
 }
-   Array<Real>* Run(){ return Run(0); }
+   Array<double>* Run(){ return Run(0); }
    double flops(){	return ((double)flop() * 1.0e-9) / timesec;}
    double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
    long long flop() const { return 0;}
    long long bytes() const{ return 0;}
-   double get_time(){	return timesec;}
-   void stat(){	cout << "ConvLattice_EO_NO:  " <<  get_time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
+   double time(){	return timesec;}
+   void stat(){	cout << "OverRelaxation:  " <<  time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
   TuneKey tuneKey() const {
     std::stringstream vol, aux;
     vol << PARAMS::Grid[0] << "x";
@@ -132,20 +132,18 @@ public:
 
 };
 
-template<class Real>
-Array<Real>* LatticeConvert(Array<Real>* lat, bool eo_to_no){
+
+Array<double>* LatticeConvert(Array<double>* lat, bool eo_to_no){
 	if(eo_to_no){
-		ConvLattice_EO_NO<Real, true> cv(lat);
+		ConvLattice_EO_NO<true> cv(lat);
 		return cv.Run();
 	}
 	else{
-		ConvLattice_EO_NO<Real, false> cv(lat);
+		ConvLattice_EO_NO<false> cv(lat);
 		return cv.Run();	
 	}
 }
 
-template Array<double>* LatticeConvert(Array<double>* lat, bool eo_to_no);
-template Array<complexd>* LatticeConvert(Array<complexd>* lat, bool eo_to_no);
 
 
 

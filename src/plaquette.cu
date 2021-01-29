@@ -119,6 +119,8 @@ __global__ void kernel_plaquette(double *lat, complexd *plaq){
 
 
 
+using namespace U1;
+
 class Plaquette1: Tunable{
 private:
 	Array<double>* lat;
@@ -188,8 +190,8 @@ public:
    double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
    long long flop() const { return 0;}
    long long bytes() const{ return 0;}
-   double get_time(){	return timesec;}
-   void stat(){	cout << "Plaquette1:  " <<  get_time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
+   double time(){	return timesec;}
+   void stat(){	cout << "OverRelaxation:  " <<  time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
   TuneKey tuneKey() const {
     std::stringstream vol, aux;
     vol << PARAMS::Grid[0] << "x";

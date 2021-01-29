@@ -31,13 +31,307 @@ using namespace std;
 
 namespace U1{
 
+template<int multilevel>
+__global__ void kernel_metropolis_multilevel(double *lat, int parity, int mu, cuRNGState *rng_state){
+    size_t id = threadIdx.x + blockDim.x * blockIdx.x;
+    if( id >= HalfVolume() ) return ;
+    
+	int x[4];
+	indexEO(id, parity, x);
+	if((x[TDir()]%multilevel) || mu==3){	
+		cuRNGState localState = rng_state[ id ];
+		double new_phase = Random<double>(localState) * 2. * M_PI;
+		double b = Random<double>(localState);
+		rng_state[ id ] = localState;
+    	double dS = MetropolisFunc(lat, id, parity, mu, new_phase);
+		if(dS > b){
+			lat[id + parity * HalfVolume() + mu * Volume()] = new_phase;
+		}	
+	}
+}
 
-#include "multilevel_common.cuh"
+
+
+template<int multilevel>
+class Metropolis_ML: Tunable{
+private:
+	Array<double>* lat;
+	CudaRNG *rng_state;
+	int metrop;
+	int parity;
+	int mu;
+	int size;
+	double timesec;
+#ifdef TIMMINGS
+    Timer time;
+#endif
+
+   unsigned int sharedBytesPerThread() const { return 0; }
+   unsigned int sharedBytesPerBlock(const TuneParam &param) const { return 0; }
+   bool tuneSharedBytes() const { return false; } // Don't tune shared memory
+   bool tuneGridDim() const { return false; } // Don't tune the grid dimensions.
+   unsigned int minThreads() const { return size; }
+   void apply(const cudaStream_t &stream){
+	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
+	kernel_metropolis_multilevel<multilevel><<<tp.grid, tp.block, 0, stream>>>(lat->getPtr(), parity, mu, rng_state->getPtr());
+}
+public:
+   Metropolis_ML(Array<double>* lat, CudaRNG *rng_state, int metrop) : lat(lat), rng_state(rng_state), metrop(metrop){
+	size = HalfVolume();
+	timesec = 0.0;  
+}
+   ~Metropolis_ML(){};
+   void Run(const cudaStream_t &stream){
+#ifdef TIMMINGS
+    time.start();
+#endif
+	for(int m = 0; m < metrop; ++m)
+	for(parity = 0; parity < 2; ++parity)
+	for(mu = 0; mu < Dirs(); ++mu)
+	    apply(stream);
+    cudaDevSync();
+    cudaCheckError("Kernel execution failed");
+#ifdef TIMMINGS
+	cudaDevSync( );
+    time.stop();
+    timesec = time.getElapsedTimeInSec();
+#endif
+}
+   void Run(){	return Run(0);}
+   double flops(){	return ((double)flop() * 1.0e-9) / timesec;}
+   double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
+   long long flop() const { return 0;}
+   long long bytes() const{ return 0;}
+   double time(){	return timesec;}
+   void stat(){	cout << "Metropolis:  " <<  time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
+  TuneKey tuneKey() const {
+    std::stringstream vol, aux;
+    vol << PARAMS::Grid[0] << "x";
+    vol << PARAMS::Grid[1] << "x";
+    vol << PARAMS::Grid[2] << "x";
+    vol << PARAMS::Grid[3];
+    aux << "threads=" << size;
+    return TuneKey(vol.str().c_str(), typeid(*this).name(), aux.str().c_str());
+  }
+  std::string paramString(const TuneParam &param) const {
+    std::stringstream ps;
+    ps << "block=(" << param.block.x << "," << param.block.y << "," << param.block.z << ")";
+    ps << "shared=" << param.shared_bytes;
+    return ps.str();
+  }
+  void preTune() {
+	lat->Backup();
+	rng_state->Backup();
+  }
+  void postTune() {  
+  	lat->Restore();
+  	rng_state->Restore();
+ }
+
+};
+
+
+template<int multilevel>
+__global__ void kernel_overrelaxation_multilevel(double *lat, int parity, int mu){
+    size_t id = threadIdx.x + blockDim.x * blockIdx.x;
+    if( id >= HalfVolume() ) return ;
+    
+	int x[4];
+	indexEO(id, parity, x);
+	if((x[TDir()]%multilevel) || mu==3){		
+		lat[id + parity * HalfVolume() + mu * Volume()] = OvrFunc(lat, id, parity, mu);
+	}
+}
+
+
+template<int multilevel>
+class OverRelaxation_ML: Tunable{
+private:
+	Array<double>* lat;
+	int ovrn;
+	int parity;
+	int mu;
+	int size;
+	double timesec;
+#ifdef TIMMINGS
+    Timer time;
+#endif
+
+   unsigned int sharedBytesPerThread() const { return 0; }
+   unsigned int sharedBytesPerBlock(const TuneParam &param) const { return 0; }
+   bool tuneSharedBytes() const { return false; } // Don't tune shared memory
+   bool tuneGridDim() const { return false; } // Don't tune the grid dimensions.
+   unsigned int minThreads() const { return size; }
+   void apply(const cudaStream_t &stream){
+	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
+	kernel_overrelaxation_multilevel<multilevel><<<tp.grid, tp.block, 0, stream>>>(lat->getPtr(), parity, mu);
+}
+public:
+   OverRelaxation_ML(Array<double>* lat, int ovrn) : lat(lat), ovrn(ovrn){
+	size = HalfVolume();
+	timesec = 0.0;  
+}
+   ~OverRelaxation_ML(){};
+   void Run(const cudaStream_t &stream){
+#ifdef TIMMINGS
+    time.start();
+#endif
+	for(int m = 0; m < ovrn; ++m)
+	for(parity = 0; parity < 2; ++parity)
+	for(mu = 0; mu < Dirs(); ++mu){
+		//cout << multilevel << '\t' << mu << '\t' << parity << '\t' << m << endl;
+	    apply(stream);
+    }
+    cudaDevSync();
+    cudaCheckError("Kernel execution failed");
+#ifdef TIMMINGS
+	cudaDevSync( );
+    time.stop();
+    timesec = time.getElapsedTimeInSec();
+#endif
+}
+   void Run(){	return Run(0);}
+   double flops(){	return ((double)flop() * 1.0e-9) / timesec;}
+   double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
+   long long flop() const { return 0;}
+   long long bytes() const{ return 0;}
+   double time(){	return timesec;}
+   void stat(){	cout << "OverRelaxation:  " <<  time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
+  TuneKey tuneKey() const {
+    std::stringstream vol, aux;
+    vol << PARAMS::Grid[0] << "x";
+    vol << PARAMS::Grid[1] << "x";
+    vol << PARAMS::Grid[2] << "x";
+    vol << PARAMS::Grid[3];
+    aux << "threads=" << size;
+    return TuneKey(vol.str().c_str(), typeid(*this).name(), aux.str().c_str());
+  }
+  std::string paramString(const TuneParam &param) const {
+    std::stringstream ps;
+    ps << "block=(" << param.block.x << "," << param.block.y << "," << param.block.z << ")";
+    ps << "shared=" << param.shared_bytes;
+    return ps.str();
+  }
+  void preTune() {
+  	lat->Backup();		
+  }
+  void postTune() {  
+	lat->Restore();
+ }
+
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+template<bool multihit>
+__global__ void kernel_l2_multilevel_0(double *lat, complexd *poly){
+    size_t id = threadIdx.x + blockDim.x * blockIdx.x;   
+	if( id >= Volume() ) return;
+	int parity = 0;
+	if( id >= Volume()/2 ){
+		parity = 1;	
+		id -= Volume()/2;
+	}	
+	int x[4];
+	indexEO(id, parity, x);
+	int id4d = indexId(x);
+	
+	if(multihit){	
+		poly[id4d] = MultiHit(lat, id, parity, TDir());
+	}
+	else{
+		poly[id4d] = exp_ir(lat[ indexId(x, TDir()) ]);
+	}
+}
+
+
+template< bool multihit>
+class Polyakov_Volume: Tunable{
+private:
+	Array<double>* lat;
+	Array<complexd>* poly;
+	int size;
+	double timesec;
+#ifdef TIMMINGS
+    Timer time;
+#endif
+
+   unsigned int sharedBytesPerThread() const { return 0; }
+   unsigned int sharedBytesPerBlock(const TuneParam &param) const { return 0; }
+   bool tuneSharedBytes() const { return false; } // Don't tune shared memory
+   bool tuneGridDim() const { return false; } // Don't tune the grid dimensions.
+   unsigned int minThreads() const { return size; }
+   void apply(const cudaStream_t &stream){
+	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
+	kernel_l2_multilevel_0<multihit><<<tp.grid, tp.block, 0, stream>>>(lat->getPtr(), poly->getPtr());
+}
+public:
+   Polyakov_Volume(Array<double>* lat) : lat(lat) {
+	size = Volume();
+	poly = new Array<complexd>(Device, Volume());
+	timesec = 0.0;  
+}
+   ~Polyakov_Volume(){ };
+   Array<complexd>* Run(const cudaStream_t &stream){
+#ifdef TIMMINGS
+    time.start();
+#endif
+	apply(stream);
+    cudaDevSync();
+    cudaCheckError("Kernel execution failed");
+#ifdef TIMMINGS
+	cudaDevSync( );
+    time.stop();
+    timesec = time.getElapsedTimeInSec();
+#endif
+	return poly;
+}
+   Array<complexd>* Run(){	return Run(0);}
+   double flops(){	return ((double)flop() * 1.0e-9) / timesec;}
+   double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
+   long long flop() const { return 0;}
+   long long bytes() const{ return 0;}
+   double time(){	return timesec;}
+   void stat(){	cout << "OverRelaxation:  " <<  time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
+  TuneKey tuneKey() const {
+    std::stringstream vol, aux;
+    vol << PARAMS::Grid[0] << "x";
+    vol << PARAMS::Grid[1] << "x";
+    vol << PARAMS::Grid[2] << "x";
+    vol << PARAMS::Grid[3];
+    aux << "threads=" << size;
+    return TuneKey(vol.str().c_str(), typeid(*this).name(), aux.str().c_str());
+  }
+  std::string paramString(const TuneParam &param) const {
+    std::stringstream ps;
+    ps << "block=(" << param.block.x << "," << param.block.y << "," << param.block.z << ")";
+    ps << "shared=" << param.shared_bytes;
+    return ps.str();
+  }
+  void preTune() { }
+  void postTune() { }
+
+};
+
+
 
 __global__ void kernel_l2_multilevel_1(complexd *poly, complexd *l2, int radius){
     size_t id = threadIdx.x + blockDim.x * blockIdx.x;    
 	if(id >= SpatialVolume()) return;		
-	int x[4];
+	int x[3];
 	indexNOSD(id, x);
 	
 	int nlayers = Grid(TDir())/2;
@@ -112,8 +406,8 @@ public:
    double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
    long long flop() const { return 0;}
    long long bytes() const{ return 0;}
-   double get_get_time(){	return timesec;}
-   void stat(){	cout << "L2ML:  " <<  get_get_time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
+   double time(){	return timesec;}
+   void stat(){	cout << "OverRelaxation:  " <<  time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
   TuneKey tuneKey() const {
     std::stringstream vol, aux;
     vol << PARAMS::Grid[0] << "x";
@@ -208,8 +502,8 @@ public:
    double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
    long long flop() const { return 0;}
    long long bytes() const{ return 0;}
-   double get_get_time(){	return timesec;}
-   void stat(){	cout << "L2AvgL4ML:  " <<  get_get_time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
+   double time(){	return timesec;}
+   void stat(){	cout << "OverRelaxation:  " <<  time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
   TuneKey tuneKey() const {
     std::stringstream vol, aux;
     vol << PARAMS::Grid[0] << "x";
@@ -281,9 +575,7 @@ private:
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
 	dev_poly->Clear();
-	if(savePPspace) kernel_l4avg_Final_multilevel<savePPspace><<<tp.grid, tp.block, tp.shared_bytes, stream>>>(l4->getPtr(), dev_poly->getPtr(), ppSpace->getPtr(), radius, l4norm);
-	else kernel_l4avg_Final_multilevel<savePPspace><<<tp.grid, tp.block, tp.shared_bytes, stream>>>(l4->getPtr(), dev_poly->getPtr(), 0, radius, l4norm);
-	
+	kernel_l4avg_Final_multilevel<savePPspace><<<tp.grid, tp.block, tp.shared_bytes, stream>>>(l4->getPtr(), dev_poly->getPtr(), ppSpace->getPtr(), radius, l4norm);
 }
 public:
 	Array<complexd> *ppSpace;
@@ -319,8 +611,8 @@ public:
    double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
    long long flop() const { return 0;}
    long long bytes() const{ return 0;}
-   double get_get_time(){	return timesec;}
-   void stat(){	cout << "L4AvgPP:  " <<  get_get_time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
+   double time(){	return timesec;}
+   void stat(){	cout << "OverRelaxation:  " <<  time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
   TuneKey tuneKey() const {
     std::stringstream vol, aux;
     vol << PARAMS::Grid[0] << "x";
@@ -344,24 +636,8 @@ public:
 
 
 
-Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int k4, int n2, int k2, int metrop, int ovrn, int Rmax, bool PrintResultsAtEveryN4){
-	Timer a0; a0.start();
+Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int k4, int n2, int k2, int metrop, int ovrn){
 
-	cout << "Rmax: " << Rmax << endl;
-	cout << "Level 0:" << endl;
-	cout << "\tNº time links per slice: " << 2 << endl;
-	cout << "\tNº iterations: " << n2 << endl;
-	cout << "\tNº updates: " << k2 << endl;
-	cout << "\tNº metropolis updates: " << metrop << endl;
-	cout << "\tNº overrelaxation updates: " << ovrn << endl;
-	
-	cout << "Level 1:" << endl;
-	cout << "\tNº time links per slice: " << 4 << endl;
-	cout << "\tNº iterations: " << n4 << endl;
-	cout << "\tNº updates: " << k4 << endl;
-	cout << "\tNº metropolis updates: " << metrop << endl;
-	cout << "\tNº overrelaxation updates: " << ovrn << endl;
-	
 	if( Grid(TDir())%4 != 0 ) {
 		cout << "Error: Cannot Apply MultiLevel Algorithm...\n Nt is not multiple of 4...\n Exiting..." << endl;
 		exit(1);
@@ -369,11 +645,12 @@ Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int 
 	Array<double>* dev_lat = new Array<double>(Device);
 	dev_lat->Copy(lat);
 
+	int radius = Grid(0)/2;
 	int nl2 = Grid(TDir())/2;
-	int sl2 = nl2*(Dirs()-1)*Rmax*SpatialVolume();
+	int sl2 = nl2*(Dirs()-1)*radius*SpatialVolume();
 	Array<complexd> *l2 = new Array<complexd>(Device, sl2);
 	int nl4 = Grid(TDir())/4;
-	size_t sl4 = nl4*(Dirs()-1)*Rmax*SpatialVolume();
+	size_t sl4 = nl4*(Dirs()-1)*radius*SpatialVolume();
 	Array<complexd> *l4 = new Array<complexd>(Device, sl4);
 	
 	// metropolis and overrelaxation algorithm
@@ -388,9 +665,9 @@ Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int 
 	Array<complexd>* dev_mhit;
 	
 	double l2norm = 1./double(n2);
-	L2AvgL4ML l2avgl4(l2, l4, sl4, Rmax, l2norm);
+	L2AvgL4ML l2avgl4(l2, l4, sl4, radius, l2norm);
 	double l4norm = 1./double(n4);
-	L4AvgPP<false> l4avgpp(l4, Rmax, l4norm);
+	L4AvgPP<false> l4avgpp(l4, radius, l4norm);
 
 	l4->Clear();
 	for(int i = 0; i < n4; ++i){
@@ -410,16 +687,16 @@ Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int 
 			//Extract temporal links and apply MultiHit
 			dev_mhit = mhitVol.Run();			
 			//Calculate tensor T2
-			L2ML l2ml(dev_mhit, l2, sl2, Rmax);
+			L2ML l2ml(dev_mhit, l2, sl2, radius);
 			l2ml.Run();
 		}
 		//Average tensor T2 and Calculate tensor T4
 		l2avgl4.Run();	
 		
 		
-		if(PrintResultsAtEveryN4){
+		if(0){
 			double l4norm1 = 1./double(i+1);
-			L4AvgPP<false> l4avgpp1(l4, Rmax, l4norm1);
+			L4AvgPP<false> l4avgpp1(l4, radius, l4norm1);
 			Array<complexd>* res = l4avgpp1.Run();
 			cout << res << endl;
 			delete res;
@@ -445,14 +722,12 @@ Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int 
 	}
 	fileout.precision(12);
 	
-	for(int r = 0; r < Rmax; ++r){
+	for(int r = 0; r < radius; ++r){
 		cout << r+1 << '\t' << res->at(r) << endl;
 		fileout << r+1 << '\t' << res->at(r) << endl;
 	}
 	
 	fileout.close();	
-	a0.stop();
-	std::cout << "time " << a0.getElapsedTime() << " s" << endl;
 	return res;
 } 
 
@@ -462,24 +737,8 @@ Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int n4, int 
 
 
 
-void MultiLevelField(Array<double> *lat, CudaRNG *rng_state, Array<complexd> **pp, Array<complexd> **ppfield, int n4, int k4, int n2, int k2, int metrop, int ovrn, int Rmax, bool PrintResultsAtEveryN4){
-	Timer a0; a0.start();
+MultiLevelRes* MultiLevelField(Array<double> *lat, CudaRNG *rng_state, int n4, int k4, int n2, int k2, int metrop, int ovrn){
 
-	cout << "Rmax: " << Rmax << endl;
-	cout << "Level 0:" << endl;
-	cout << "\tNº time links per slice: " << 2 << endl;
-	cout << "\tNº iterations: " << n2 << endl;
-	cout << "\tNº updates: " << k2 << endl;
-	cout << "\tNº metropolis updates: " << metrop << endl;
-	cout << "\tNº overrelaxation updates: " << ovrn << endl;
-	
-	cout << "Level 1:" << endl;
-	cout << "\tNº time links per slice: " << 4 << endl;
-	cout << "\tNº iterations: " << n4 << endl;
-	cout << "\tNº updates: " << k4 << endl;
-	cout << "\tNº metropolis updates: " << metrop << endl;
-	cout << "\tNº overrelaxation updates: " << ovrn << endl;
-	
 	if( Grid(TDir())%4 != 0 ) {
 		cout << "Error: Cannot Apply MultiLevel Algorithm...\n Nt is not multiple of 4...\n Exiting..." << endl;
 		exit(1);
@@ -487,11 +746,12 @@ void MultiLevelField(Array<double> *lat, CudaRNG *rng_state, Array<complexd> **p
 	Array<double>* dev_lat = new Array<double>(Device);
 	dev_lat->Copy(lat);
 
+	int radius = Grid(0)/2;
 	int nl2 = Grid(TDir())/2;
-	int sl2 = nl2*(Dirs()-1)*Rmax*SpatialVolume();
+	int sl2 = nl2*(Dirs()-1)*radius*SpatialVolume();
 	Array<complexd> *l2 = new Array<complexd>(Device, sl2);
 	int nl4 = Grid(TDir())/4;
-	size_t sl4 = nl4*(Dirs()-1)*Rmax*SpatialVolume();
+	size_t sl4 = nl4*(Dirs()-1)*radius*SpatialVolume();
 	Array<complexd> *l4 = new Array<complexd>(Device, sl4);
 	
 	// metropolis and overrelaxation algorithm
@@ -506,9 +766,9 @@ void MultiLevelField(Array<double> *lat, CudaRNG *rng_state, Array<complexd> **p
 	Array<complexd>* dev_mhit;
 	
 	double l2norm = 1./double(n2);
-	L2AvgL4ML l2avgl4(l2, l4, sl4, Rmax, l2norm);
+	L2AvgL4ML l2avgl4(l2, l4, sl4, radius, l2norm);
 	double l4norm = 1./double(n4);
-	L4AvgPP<true> l4avgpp(l4, Rmax, l4norm);
+	L4AvgPP<true> l4avgpp(l4, radius, l4norm);
 
 	l4->Clear();
 	for(int i = 0; i < n4; ++i){
@@ -528,16 +788,16 @@ void MultiLevelField(Array<double> *lat, CudaRNG *rng_state, Array<complexd> **p
 			//Extract temporal links and apply MultiHit
 			dev_mhit = mhitVol.Run();			
 			//Calculate tensor T2
-			L2ML l2ml(dev_mhit, l2, sl2, Rmax);
+			L2ML l2ml(dev_mhit, l2, sl2, radius);
 			l2ml.Run();
 		}
 		//Average tensor T2 and Calculate tensor T4
 		l2avgl4.Run();	
 		
 		
-		if(PrintResultsAtEveryN4){
+		if(0){
 			double l4norm1 = 1./double(i+1);
-			L4AvgPP<false> l4avgpp1(l4, Rmax, l4norm1);
+			L4AvgPP<false> l4avgpp1(l4, radius, l4norm1);
 			Array<complexd>* res = l4avgpp1.Run();
 			cout << res << endl;
 			delete res;
@@ -547,9 +807,10 @@ void MultiLevelField(Array<double> *lat, CudaRNG *rng_state, Array<complexd> **p
 	delete dev_mhit;
 	delete l2;
 	//Average tensor T4 and Calculate P(0)*conj(P(r))
-	*pp = l4avgpp.Run();
+	MultiLevelRes *res = new MultiLevelRes;	
+	res->poly = l4avgpp.Run();
 	delete l4;
-	*ppfield = l4avgpp.getField();
+	res->ppSpace = l4avgpp.getField();
 
 	std::ofstream fileout;
 	std::string filename = "Pot_mlevel_" + GetLatticeNameI();
@@ -562,20 +823,17 @@ void MultiLevelField(Array<double> *lat, CudaRNG *rng_state, Array<complexd> **p
 		std::cout << "Error opening file: " << filename << std::endl;
 		exit(1);
 	}
-	cout << "Saving data to " << filename << endl;
-	fileout << std::scientific;
-	fileout.precision(14);
+	fileout.precision(12);
 	cout << std::scientific;
 	cout << std::setprecision(14);
 	
-	for(int r = 0; r < Rmax; ++r){
-		cout << r+1 << '\t' << (*pp)->at(r) << endl;
-		fileout << r+1 << '\t' << (*pp)->at(r) << endl;
+	for(int r = 0; r < radius; ++r){
+		cout << r+1 << '\t' << res->poly->at(r) << endl;
+		fileout << r+1 << '\t' << res->poly->at(r) << endl;
 	}
 	
-	fileout.close();
-	a0.stop();
-	std::cout << "time " << a0.getElapsedTime() << " s" << endl;
+	fileout.close();	
+	return res;
 }
 
 

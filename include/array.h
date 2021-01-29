@@ -7,40 +7,31 @@
 #include "cuda_error_check.h"
 #include "enum.h"
 #include "parameters.h"
-#include "object.h"
 
 
 namespace U1{
 
+
+
+
+
+
 template<class Real>
-class Array : public Object{ 	
+class Array{	
 	public:
-	Array(){ 
-		ptr = 0; 
-		size = 0; 
-		ptr_backup = 0; 
-		location = Host;
-	}
-	
-	Array(StoreMode location_){ 
-		ptr = 0; 
-		size = 0; 
-		ptr_backup = 0; 
-		location = location_;
-	}
-	
-	Array(StoreMode location, size_t size):location(location), size(size){
+	Array(){ ptr = 0; size = 0; ptr_backup = 0; location = Host;}
+	Array(ReadMode location_){ ptr = 0; size = 0; ptr_backup = 0; location = location_;}
+	Array(ReadMode location, size_t size):location(location), size(size){
 		ptr = 0;
 		ptr_backup = 0;
-		Allocate(&ptr, location, size);
+		ptr = Allocate(size);
 	}
-	virtual ~Array(){ Release(); }
-	
+	~Array(){ Release(); }
 	Real*  getPtr(){ return ptr; }
-	
 	size_t Size(){ return size; }
+	ReadMode Location(){ return location; }
 	
-	StoreMode Location(){ return location; }	
+	
 	
     M_HOSTDEVICE Real& operator()(const int i){
         return ptr[i];
@@ -64,67 +55,63 @@ class Array : public Object{
         return ptr[i];
     }
 	
+	
+	
 	void Copy(Array *in){
 		if(ptr){
 			if( size != in->Size() ){
-				Release(&ptr, location);
+				switch(location){
+					case Host:
+						host_free(ptr);
+					break;
+					case Device:
+						dev_free(ptr);
+					break;
+				}
+				ptr = 0;
 				size = in->Size();
-				Allocate(&ptr, location, size);
+				ptr = Allocate(size);
 			}
 		}	
 		else{
 			size = in->Size();
-			Allocate(&ptr, location, size);
+			ptr = Allocate(size);
 		}
+		//std::cout << ptr << "\t" << size << std::endl;
 		cpy(in->getPtr(), in->location, getPtr(), location, in->Size());
 	}
 	void Clear(){
-		if(ptr){
+		switch(location){
+			case Host:
+				memset(ptr, 0, size*sizeof(Real));
+			break;
+			case Device:
+				cudaSafeCall(cudaMemset(ptr, 0, size*sizeof(Real)));
+			break;
+		}
+	
+	
+	}
+	
+	void Backup(){
+		ptr_backup = Allocate(size);
+		cudaSafeCall(cudaMemcpy(ptr_backup, ptr, size*sizeof(Real), GetMemcpyKind( location, location)));
+	}
+	void Restore(){		
+		cudaSafeCall(cudaMemcpy(ptr, ptr_backup, size*sizeof(Real), GetMemcpyKind( location, location)));
+		if(ptr_backup){
 			switch(location){
 				case Host:
-					memset(ptr, 0, size*sizeof(Real));
+					host_free(ptr_backup);
 				break;
 				case Device:
-					cudaSafeCall(cudaMemset(ptr, 0, size*sizeof(Real)));
-				case Managed:
-					cudaSafeCall(cudaMemset(ptr, 0, size*sizeof(Real)));
+					dev_free(ptr_backup);
 				break;
 			}
+			ptr_backup = 0;
 		}	
 	}
 	
-	size_t Bytes() { return size * sizeof(Real); }
-	
-	void Backup(){
-		Release(&ptr_backup, backup_loc);
-	    size_t mfree, mtotal;
-	    int gpuid=-1;
-	    cudaSafeCall(cudaGetDevice(&gpuid));
-	    cudaSafeCall(cudaMemGetInfo(&mfree, &mtotal));
-	    std::cout << "Device memory free: " << mfree/(float)(1048576) << " MB of " << mtotal/(float)(1048576) << " MB." << std::endl;
-	    std::cout << "Memory size required to backup array: " << Bytes()/(float)(1048576) << " MB." << std::endl;
-	    if(mfree > Bytes()){
-	        std::cout << "Backup array in Device..." << std::endl;
-	        backup_loc = Device;
-	    } 
-	    else{
-	       std::cout << "Backup array in Host..." << std::endl;
-	        backup_loc = Host;
-	    }	    
-		Allocate(&ptr_backup, backup_loc, size);
-		cpy(ptr, location, ptr_backup, backup_loc, size);
-	}
-	
-	void Restore(){
-		if(ptr_backup){
-			cpy(ptr_backup, backup_loc, ptr, location, size);
-			Release(&ptr_backup, backup_loc);
-		}
-		else{
-			std::cout << "Error: Cannot restore a dealocated pointer..." << std::endl;
-			exit(1);
-		}		
-	}
     
 	friend M_HOST std::ostream& operator<<( std::ostream& out, Array<Real> M ) {
 		//out << std::scientific;
@@ -133,7 +120,6 @@ class Array : public Object{
 			out << i << '\t' << M.ptr[i] << std::endl;;
 		return out;
 	}
-	
 	friend M_HOST std::ostream& operator<<( std::ostream& out, Array<Real> *M ) {
 		//out << std::scientific;
 		//out << std::setprecision(14);
@@ -146,62 +132,61 @@ class Array : public Object{
 	private:
 	Real *ptr;
 	Real *ptr_backup;
-	StoreMode location; //HOST or DEVICE
-	StoreMode backup_loc; //HOST or DEVICE
+	ReadMode location; //HOST or DEVICE
 	size_t size;
 	
-	void cpy(Real *in, StoreMode lin, Real *out, StoreMode lout, size_t s_in){
+	Real* Allocate(size_t insize){
+		Real* tmp = 0;
+		switch(location){
+			case Host:
+				tmp = (Real*)safe_malloc(insize*sizeof(Real));
+				if(getVerbosity() >= DEBUG_VERBOSE) std::cout << "Allocate array " << tmp << " in Host with: " << float(size*sizeof(Real))/1048576. << " MB" << std::endl;
+			break;
+			case Device:
+				tmp = (Real*)dev_malloc(insize*sizeof(Real));
+				if(getVerbosity() >= DEBUG_VERBOSE) std::cout << "Allocate array " << tmp << " in Device with: " << float(size*sizeof(Real))/1048576. << " MB" << std::endl;
+			break;
+		}	
+		return tmp;
+	}	
+	void cpy(Real *in, ReadMode lin, Real *out, ReadMode lout, size_t s_in){
 		cudaSafeCall(cudaMemcpy(out, in, s_in*sizeof(Real), GetMemcpyKind( lin, lout)));
 	}
 	
 	void Release(){ 
-		Release(&ptr, location);
-		Release(&ptr_backup, backup_loc);	
-	}
-	
-////////////////////////////////////////////////////////////////////////////////////
-	void Allocate(Real **ptr_in, StoreMode loc, size_t insize){
-		if(*ptr_in) Release(ptr_in, loc);
-		switch(loc){
-			case Host:
-				*ptr_in = (Real*)safe_malloc(insize*sizeof(Real));
-				if(getVerbosity() >= DEBUG_VERBOSE) std::cout << "Allocate array " << *ptr_in << " in Host with: " << float(insize*sizeof(Real))/1048576. << " MB" << std::endl;
-			break;
-			case Device:
-				*ptr_in = (Real*)dev_malloc(insize*sizeof(Real));
-				if(getVerbosity() >= DEBUG_VERBOSE) std::cout << "Allocate array " << *ptr_in << " in Device with: " << float(insize*sizeof(Real))/1048576. << " MB" << std::endl;
-			break;
-			case Managed:
-				*ptr_in = (Real*)managed_malloc(insize*sizeof(Real));
-				if(getVerbosity() >= DEBUG_VERBOSE) std::cout << "Allocate array " << *ptr_in << " in Managed with: " << float(insize*sizeof(Real))/1048576. << " MB" << std::endl;
-			break;
-		}	
-	}
-	void Release(Real **ptr_in, StoreMode loc){
-		if(*ptr_in){
-			switch(loc){
+		if(ptr){
+			switch(location){
 				case Host:
-				    if(getVerbosity() >= DEBUG_VERBOSE) std::cout << "Release array " << *ptr_in << " in Host" << std::endl;
-					host_free(*ptr_in);
+				    if(getVerbosity() >= DEBUG_VERBOSE) std::cout << "Release array " << ptr << " in Host with: " << float(size*sizeof(Real))/1048576. << " MB" << std::endl;
+					host_free(ptr);
 				break;
 				case Device:
-					if(getVerbosity() >= DEBUG_VERBOSE) std::cout << "Release array " << *ptr_in << " in Device" << std::endl;
-					dev_free(*ptr_in);
-				break;
-				case Managed:
-					if(getVerbosity() >= DEBUG_VERBOSE) std::cout << "Release array " << *ptr_in << " in Managed" << std::endl;
-					managed_free(*ptr_in);
+					if(getVerbosity() >= DEBUG_VERBOSE) std::cout << "Release array " << ptr << " in Device with: " << float(size*sizeof(Real))/1048576. << " MB" << std::endl;
+					dev_free(ptr);
 				break;
 			}
-			*ptr_in = 0;
-		}
+			ptr = 0;
+		}	
+		if(ptr_backup){
+			switch(location){
+				case Host:
+					host_free(ptr_backup);
+				break;
+				case Device:
+					dev_free(ptr_backup);
+				break;
+			}
+			ptr_backup = 0;
+		}	
 	}
-	
 };
 
 
-template<class Real>
-Array<Real>* LatticeConvert(Array<Real>* lat, bool eo_to_no);
+
+Array<double>* LatticeConvert(Array<double>* lat, bool eo_to_no);
+
+
+
 
 }
 

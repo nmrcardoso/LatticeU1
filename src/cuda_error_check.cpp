@@ -45,7 +45,6 @@ void Start(int gpuid, Verbosity verb, TuneMode tune){
 }
 
 void Finalize_(const char *func, const char *file, int line, int error){
-	if(error>0) exit(error);
 	cudaSafeCall(cudaDeviceSynchronize());
   	if(getTuning()==TUNE_YES) saveTuneCache(getVerbosity());
 	printPeakMemUsage();

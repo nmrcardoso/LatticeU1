@@ -24,11 +24,11 @@
 #include "lattice_functions.h"
 
 
+using namespace std;
 
 
 namespace U1{
 
-using namespace std;
 
 
 template<bool spacetime, bool evenoddOrder>
@@ -109,11 +109,11 @@ __global__ void kernel_plaquette_comps(const double *lat, complexd *plaq_comps, 
 	
 template<bool spacetime, bool evenoddOrder>
 class PlaqFields: Tunable{
+public:
+	PlaqFieldArg* fields;
 private:
 	Array<double>* lat;
-	Array<complexd> *plaqfield;
-	Array<complexd> *plaq;
-	Array<complexd> *dev_plaq;
+	complexd *dev_plaq;
 	double norm;
 	int size;
 	double timesec;
@@ -128,34 +128,32 @@ private:
    unsigned int minThreads() const { return size; }
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-	dev_plaq->Clear();
-	kernel_plaquette_comps<spacetime, evenoddOrder><<<tp.grid, tp.block, tp.shared_bytes, stream>>>(lat->getPtr(), plaqfield->getPtr(), dev_plaq->getPtr());
+	cudaSafeCall(cudaMemset(dev_plaq, 0, 6*sizeof(complexd)));
+	kernel_plaquette_comps<spacetime, evenoddOrder><<<tp.grid, tp.block, tp.shared_bytes, stream>>>(lat->getPtr(), fields->plaqfield, dev_plaq);
 }
 public:
-   PlaqFields(Array<double>* lat, Array<complexd> **plaqfieldi, Array<complexd> **plaqi) : lat(lat) {
+   PlaqFields(Array<double>* lat, PlaqFieldArg* fields) : lat(lat), fields(fields) {
    	if(spacetime) size = Volume();
    	else size = SpatialVolume();
-   	plaqfield = new Array<complexd>(Device, 6*size);
-   	plaq = new Array<complexd>(Host, 6);
-   	*plaqfieldi = plaqfield;
-   	*plaqi = plaq;
-   	dev_plaq = new Array<complexd>(Device, 6);
-   	
+	fields->plaqfield = (complexd*)dev_malloc(6*size*sizeof(complexd));
+	fields->plaq = (complexd*)safe_malloc(6*sizeof(complexd));
+	fields->size = size;
+	dev_plaq = (complexd*)dev_malloc(6*sizeof(complexd));
 	norm = 1. / double(size);
 	timesec = 0.0;  
 }
-   ~PlaqFields(){ delete dev_plaq;};
+   ~PlaqFields(){ dev_free(dev_plaq);};
    void Run(const cudaStream_t &stream){
 #ifdef TIMMINGS
     time.start();
 #endif
 	apply(stream);
-	plaq->Copy(dev_plaq);
+	cudaSafeCall(cudaMemcpy(fields->plaq, dev_plaq, 6*sizeof(complexd), cudaMemcpyDeviceToHost));
 	complexd mean = 0.;
 	for(int i = 0; i < 6; i++){
-		plaq->at(i) *= norm;
-		mean += plaq->at(i);
-		cout << "plaq(" << i << "): " << plaq->at(i) << endl;
+		fields->plaq[i] *= norm;
+		mean += fields->plaq[i];
+		cout << "plaq(" << i << "): " << fields->plaq[i] << endl;
 	}
 	mean /= 6.0;
 	cout << "Mean plaquette: " << mean << endl;
@@ -172,8 +170,8 @@ public:
    double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
    long long flop() const { return 0;}
    long long bytes() const{ return 0;}
-   double get_time(){	return timesec;}
-   void stat(){	cout << "PlaqFields:  " <<  get_time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
+   double time(){	return timesec;}
+   void stat(){	cout << "OverRelaxation:  " <<  time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
   TuneKey tuneKey() const {
     std::stringstream vol, aux;
     vol << PARAMS::Grid[0] << "x";
@@ -199,32 +197,32 @@ public:
 
 
 template<bool spacetime, bool evenoddOrder>
-void PlaquetteFields(Array<double> *lat, Array<complexd> **plaqfield, Array<complexd> **plaq){
-	PlaqFields<spacetime, evenoddOrder> plaqf(lat, plaqfield, plaq);
+void PlaquetteFields(Array<double> *lat, PlaqFieldArg* plaqfield){
+	PlaqFields<spacetime, evenoddOrder> plaqf(lat, plaqfield);
 	plaqf.Run();
 }
 
 template<bool spacetime>
-void PlaquetteFields(Array<double> *lat, Array<complexd> **plaqfield, Array<complexd> **plaq, bool evenoddOrder){
+void PlaquetteFields(Array<double> *lat, PlaqFieldArg* plaqfield, bool evenoddOrder){
 	if(evenoddOrder){
-		PlaquetteFields<spacetime, true>(lat, plaqfield, plaq);
+		PlaquetteFields<spacetime, true>(lat, plaqfield);
 	}
 	else{
-		PlaquetteFields<spacetime, false>(lat, plaqfield, plaq);
+		PlaquetteFields<spacetime, false>(lat, plaqfield);
 	}
 }
 
 
-void PlaquetteFields(Array<double> *lat, Array<complexd> **plaqfield, Array<complexd> **plaq, bool spacetime, bool evenoddOrder){
+void PlaquetteFields(Array<double> *lat, PlaqFieldArg* plaqfield, bool spacetime, bool evenoddOrder){
 	if(Dirs() < 4){
 		cout << "Only implemented for the 4D case...." << endl;
 		Finalize(1);
 	}
 	if(spacetime){
-		PlaquetteFields<true>(lat, plaqfield, plaq, evenoddOrder);
+		PlaquetteFields<true>(lat, plaqfield, evenoddOrder);
 	}
 	else{
-		PlaquetteFields<false>(lat, plaqfield, plaq, evenoddOrder);
+		PlaquetteFields<false>(lat, plaqfield, evenoddOrder);
 	}
 } 
 

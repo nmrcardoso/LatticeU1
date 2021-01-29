@@ -27,6 +27,8 @@
 
 namespace U1{
 
+//#define TIMMINGS
+
 __global__ void kernel_hotstart(double *lat, cuRNGState *rng_state){
     size_t id = threadIdx.x + blockDim.x * blockIdx.x;
     if( id >= HalfVolume() ) return ;
@@ -256,20 +258,6 @@ void UpdateLattice1(Array<double> *dev_lat, CudaRNG *rng_state, int metrop, int 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-using namespace U1;
-
 class Metropolis: Tunable{
 private:
 	Array<double>* lat;
@@ -319,8 +307,8 @@ public:
    double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
    long long flop() const { return 0;}
    long long bytes() const{ return 0;}
-   double time(){	return timesec;}
-   void stat(){	cout << "Metropolis:  " <<  time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
+   double get_time(){	return timesec;}
+   void stat(){	cout << "Metropolis:  " <<  get_time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
   TuneKey tuneKey() const {
     std::stringstream vol, aux;
     vol << PARAMS::Grid[0] << "x";
@@ -397,8 +385,8 @@ public:
    double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
    long long flop() const { return 0;}
    long long bytes() const{ return 0;}
-   double time(){	return timesec;}
-   void stat(){	cout << "OverRelaxation:  " <<  time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
+   double get_time(){	return timesec;}
+   void stat(){	cout << "OverRelaxation:  " <<  get_time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
   TuneKey tuneKey() const {
     std::stringstream vol, aux;
     vol << PARAMS::Grid[0] << "x";
@@ -450,9 +438,157 @@ void UpdateLattice(Array<double> *dev_lat, CudaRNG *rng_state, int metrop, int o
 	// metropolis algorithm
 	Metropolis mtp(dev_lat, rng_state, metrop);
 	mtp.Run();
+	//mtp.stat();
 	// overrelaxation algorithm
 	OverRelaxation ovr(dev_lat, ovrn);
 	ovr.Run();
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+__global__ void kernel_metropolis_new(double *lat, int parity, int mu, double2 *rng){
+    size_t id = threadIdx.x + blockDim.x * blockIdx.x;
+    if( id >= HalfVolume() ) return ;
+    double2 state = rng[ id ];
+	double new_phase = state.x * 2. * M_PI;
+	double b = state.y;
+    
+    double dS = MetropolisFunc(lat, id, parity, mu, new_phase);
+
+	if(dS > b){
+		lat[id + parity * HalfVolume() + mu * Volume()] = new_phase;
+	}
+}
+	
+	
+
+
+
+
+
+
+
+class Metropolis1: Tunable{
+private:
+	Array<double>* lat;
+	CudaRNG1 *rng;
+	int metrop;
+	int parity;
+	int mu;
+	int size;
+	double timesec;
+#ifdef TIMMINGS
+    Timer time;
+#endif
+
+   unsigned int sharedBytesPerThread() const { return 0; }
+   unsigned int sharedBytesPerBlock(const TuneParam &param) const { return 0; }
+   bool tuneSharedBytes() const { return false; } // Don't tune shared memory
+   bool tuneGridDim() const { return false; } // Don't tune the grid dimensions.
+   unsigned int minThreads() const { return size; }
+   void apply(const cudaStream_t &stream){
+	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
+	kernel_metropolis_new<<<tp.grid,tp.block, 0, stream>>>(lat->getPtr(), parity, mu, rng->getPtr());
+}
+public:
+   Metropolis1(Array<double>* lat, CudaRNG1 *rng, int metrop) : lat(lat), rng(rng), metrop(metrop){
+	size = HalfVolume();
+	timesec = 0.0;  
+}
+   ~Metropolis1(){};
+   void Run(const cudaStream_t &stream){
+#ifdef TIMMINGS
+    time.start();
+#endif
+	for(int m = 0; m < metrop; ++m)
+	for(parity = 0; parity < 2; ++parity)
+	for(mu = 0; mu < Dirs(); ++mu){
+		rng->Generate();
+	    apply(stream);
+    }
+    cudaDevSync();
+    cudaCheckError("Kernel execution failed");
+#ifdef TIMMINGS
+	cudaDevSync();
+    time.stop();
+    timesec = time.getElapsedTimeInSec();
+#endif
+}
+   void Run(){	return Run(0);}
+   double flops(){	return ((double)flop() * 1.0e-9) / timesec;}
+   double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
+   long long flop() const { return 0;}
+   long long bytes() const{ return 0;}
+   double get_time(){	return timesec;}
+   void stat(){	cout << "Metropolis1:  " <<  get_time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
+  TuneKey tuneKey() const {
+    std::stringstream vol, aux;
+    vol << PARAMS::Grid[0] << "x";
+    vol << PARAMS::Grid[1] << "x";
+    vol << PARAMS::Grid[2] << "x";
+    vol << PARAMS::Grid[3];
+    aux << "threads=" << size;
+    return TuneKey(vol.str().c_str(), typeid(*this).name(), aux.str().c_str());
+  }
+  std::string paramString(const TuneParam &param) const {
+    std::stringstream ps;
+    ps << "block=(" << param.block.x << "," << param.block.y << "," << param.block.z << ")";
+    ps << "shared=" << param.shared_bytes;
+    return ps.str();
+  }
+  void preTune() {
+  	lat->Backup();
+	//rng->Backup();
+  }
+  void postTune() {  
+	lat->Restore();
+	//rng->Restore();
+ }
+
+};
+
+
+
+
+
+
+
+void UpdateLattice(Array<double> *dev_lat, CudaRNG1 *rng, int metrop, int ovrn){
+	// metropolis algorithm
+	Metropolis1 mtp1(dev_lat, rng, metrop);
+	mtp1.Run();
+	//mtp1.stat();
+	// overrelaxation algorithm
+	OverRelaxation ovr(dev_lat, ovrn);
+	ovr.Run();
+}
+
+
+
+
+
+
+
 
 }

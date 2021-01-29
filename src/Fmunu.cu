@@ -20,82 +20,94 @@
 #include "parameters.h"
 #include "index.h"
 #include "tune.h"
-#include "array.h"
+#include "plaquette.h"
+#include "lattice_functions.h"
 
 
-using namespace std;
 
 
 namespace U1{
 
+using namespace std;
 
-template<class Real, bool EO_TO_NO_ORDER>
-__global__ void kernel_convert_EO_NO(const Real *in, Real *out){
-	size_t id = threadIdx.x + blockDim.x * blockIdx.x;
-	if( id >= Volume() ) return;
-	if(EO_TO_NO_ORDER){
+
+__global__ void kernel_Fmunu(const double *lat, complexd *fmunu_vol, complexd* mean_fmunu){
+
+    size_t idx = threadIdx.x + blockDim.x * blockIdx.x;
+   
+	complexd fmunu[6];
+	for(int d=0; d<6; d++) fmunu[d] = 0.0;
+	
+	if( idx < Volume() ) {
+	   	size_t id = idx;
 		int parity = 0;
 		if( id >= HalfVolume() ){
 			parity = 1;	
 			id -= HalfVolume();
 		}
+		
+		Fmunu(lat, fmunu, id, parity);		
 		int x[4];
 		indexEO(id, parity, x);
-		
-		size_t idx = indexId(x);
-		for(int dir = 0; dir < Dirs(); dir++){
-			out[idx + dir * Volume()] = in[id + parity * HalfVolume() + dir * Volume()];
-		}
-	}
-	else{
-		int x[4];
-		indexNO(id, x);
-		
-		size_t idx = indexId(x) >> 1;
-		int parity = GetParity(x);
-		for(int dir = 0; dir < Dirs(); dir++){
-			out[idx + parity * HalfVolume() + dir * Volume()] = in[id + dir * Volume()];
-		}
-
-
-
+		int pos = ((((x[3] * Grid(2) + x[2]) * Grid(1)) + x[1] ) * Grid(0) + x[0]);
+		for(int d=0; d<6; d++) fmunu_vol[pos + d * Volume()] = fmunu[d];
+	}	
+	
+	for(int d=0; d<6; d++){
+		reduce_block_1d<complexd>(mean_fmunu + d, fmunu[d]);
+	  __syncthreads();
 	}
 }
-
-
-template<class Real, bool EO_TO_NO_ORDER>
-class ConvLattice_EO_NO: Tunable{
-public:
+	
+	
+	
+	
+class FmunuClass: Tunable{
 private:
-	Array<Real>* lat;
-	Array<Real>* latno;
+	Array<double>* lat;
+	Array<complexd> *fmunu_vol;
+	Array<complexd> *fmunu;
+	Array<complexd> *dev_fmunu;
+	double norm;
 	int size;
 	double timesec;
 #ifdef TIMMINGS
     Timer time;
 #endif
 
-   unsigned int sharedBytesPerThread() const { return 0; }
+   unsigned int sharedBytesPerThread() const { return sizeof(complexd); }
    unsigned int sharedBytesPerBlock(const TuneParam &param) const { return 0; }
    bool tuneSharedBytes() const { return false; } // Don't tune shared memory
    bool tuneGridDim() const { return false; } // Don't tune the grid dimensions.
    unsigned int minThreads() const { return size; }
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-	kernel_convert_EO_NO<Real, EO_TO_NO_ORDER><<<tp.grid, tp.block, 0, stream>>>(lat->getPtr(), latno->getPtr());
+	dev_fmunu->Clear();
+	kernel_Fmunu<<<tp.grid, tp.block, tp.shared_bytes, stream>>>(lat->getPtr(), fmunu_vol->getPtr(), dev_fmunu->getPtr());
 }
 public:
-   ConvLattice_EO_NO(Array<Real>* lat) : lat(lat) {
+   FmunuClass(Array<double>* lat, Array<complexd> **fmunu_voli, Array<complexd> **fmunui) : lat(lat) {
    	size = Volume();
-	latno = new Array<Real>(Device, lat->Size());
+   	fmunu_vol = new Array<complexd>(Device, 6*size);
+   	fmunu = new Array<complexd>(Host, 6);
+   	*fmunu_voli = fmunu_vol;
+   	*fmunui = fmunu;
+   	dev_fmunu = new Array<complexd>(Device, 6);
+   	
+	norm = 1. / double(size);
 	timesec = 0.0;  
 }
-   ~ConvLattice_EO_NO(){ };
-   Array<Real>* Run(const cudaStream_t &stream){
+   ~FmunuClass(){ delete dev_fmunu;};
+   void Run(const cudaStream_t &stream){
 #ifdef TIMMINGS
     time.start();
 #endif
 	apply(stream);
+	fmunu->Copy(dev_fmunu);
+	for(int i = 0; i < 6; i++){
+		fmunu->at(i) *= norm;
+		cout << "Fmunu(" << i << "): " << fmunu->at(i) << endl;
+	}
     cudaDevSync();
     cudaCheckError("Kernel execution failed");
 #ifdef TIMMINGS
@@ -103,15 +115,14 @@ public:
     time.stop();
     timesec = time.getElapsedTimeInSec();
 #endif
-	return latno;
 }
-   Array<Real>* Run(){ return Run(0); }
+   void Run(){ Run(0); }
    double flops(){	return ((double)flop() * 1.0e-9) / timesec;}
    double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
    long long flop() const { return 0;}
    long long bytes() const{ return 0;}
    double get_time(){	return timesec;}
-   void stat(){	cout << "ConvLattice_EO_NO:  " <<  get_time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
+   void stat(){	cout << "Fmunu:  " <<  get_time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
   TuneKey tuneKey() const {
     std::stringstream vol, aux;
     vol << PARAMS::Grid[0] << "x";
@@ -132,24 +143,13 @@ public:
 
 };
 
-template<class Real>
-Array<Real>* LatticeConvert(Array<Real>* lat, bool eo_to_no){
-	if(eo_to_no){
-		ConvLattice_EO_NO<Real, true> cv(lat);
-		return cv.Run();
-	}
-	else{
-		ConvLattice_EO_NO<Real, false> cv(lat);
-		return cv.Run();	
-	}
+
+
+
+void Fmunu(Array<double> *lat, Array<complexd> **fmunu_vol, Array<complexd> **fmunu){
+	FmunuClass cfmunu(lat, fmunu_vol, fmunu);
+	cfmunu.Run();
 }
-
-template Array<double>* LatticeConvert(Array<double>* lat, bool eo_to_no);
-template Array<complexd>* LatticeConvert(Array<complexd>* lat, bool eo_to_no);
-
-
-
-
 
 
 }

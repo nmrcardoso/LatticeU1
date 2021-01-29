@@ -1,6 +1,6 @@
 ############################################################################################################
-VERSION  = V1_$(shell date "+%d_%m_%Y_%T")
-VERSION  = V1_$(shell date "+%d_%m_%Y_%H-%M-%S")
+#VERSION  = V1_$(shell date "+%d_%m_%Y_%T")
+VERSION  = V1_$(shell date "+%Y_%m_%d_%H-%M-%S")
 STANDARD = c99
 ############################################################################################################
 
@@ -21,7 +21,7 @@ CUDA_LIB_PATH  ?= $(CUDA_PATH)/lib64
 GENCODE_FLAGS = -arch=$(GPU_ARCH)
 LDFLAGS   := -L$(CUDA_LIB_PATH) -lcudart  -lcuda -lcurand
 CCFLAGS   :=  -O3 -I$(CUDA_INC_PATH)/
-NVCC            ?= $(CUDA_BIN_PATH)/nvcc -g
+NVCC      ?= $(CUDA_BIN_PATH)/nvcc -g
 
 
 COMP_CAP = $(GPU_ARCH:sm_%=%0)
@@ -31,7 +31,6 @@ CCFLAGS += -D__COMPUTE_CAPABILITY__=$(COMP_CAP)
 
 SRCDIR=src
 OBJDIR=obj
-MAINOBJ:=u1.o
 PROJECTNAME=u1
 INCLUDES := -I. -I./include/ 
 ############################################################################################################
@@ -41,28 +40,14 @@ HASH = \"cpu_arch=$(strip $(OS_ARCH)),gpu_arch=$(strip $(GPU_ARCH)),cuda_version
 
 all : directories $(PROJECTNAME)
 
-
-deps = $(MAINOBJ:.o=.d)
-
-$(MAINOBJ): u1.cpp
-	@echo "######################### Compiling: "$<" #########################"
-	$(VERBOSE)$(GCC) $(CCFLAGS) $(INC_DIR)  $(INCLUDES) -fopenmp -MMD -MP -c $< -o $@ 
-
-
-
-OBJS := timer.o alloc.o parameters.o random.o update.o multilevel.o plaquette.o polyakov.o tune.o cuda_error_check.o actime.o plaquette_comps.o convertOrder.o
-
+OBJS := timer.o alloc.o parameters.o random.o update.o plaquette.o polyakov.o tune.o cuda_error_check.o actime.o plaquette_comps.o chromofieldPP.o chromofieldWL.o convertOrder.o smearing.o wilsonloop.o Fmunu.o multilevel.o multilevel_generic.o  multilevel_TTO.o  multilevel_TTO_generic.o ../u1.o
 
 INCS:= include
 U1OBJS  := $(patsubst %.o,$(OBJDIR)/%.o,$(OBJS))
 deps += $(U1OBJS:.o=.d)
 
-
-
-
-
-
 $(OBJDIR)/%.o: $(SRCDIR)/%.cu
+	@echo ""
 	@echo "######################### Compiling: "$<" #########################"
 	$(VERBOSE)mkdir -p $(dir $(abspath $@ ) )
 	$(VERBOSE)$(NVCC) $(NVCCFLAGS) $(GENCODE_FLAGS) $(EXTRA_NVCCFLAGS) $(INCLUDES) -M $< -o ${@:.o=.d} -odir $(@D)
@@ -71,23 +56,24 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.cu
 	
 ############################################################################################################CUDAOBJ=$
 $(OBJDIR)/dlink.o: $(U1OBJS)
+	@echo ""
 	@echo ""######################### Creating: "dlink.o" #########################"
 	$(VERBOSE)$(NVCC) $(NVCCFLAGS) $(GENCODE_FLAGS) -dlink -o $@ $^ -lcudavert
 	
 $(OBJDIR)/tune.o: $(SRCDIR)/tune.cpp
+	@echo ""
 	@echo "######################### Compiling: "$<" #########################"
 	$(VERBOSE)$(GCC) $(CCFLAGS) $(INC_DIR) $(INCLUDES) -DU1_HASH=$(HASH)  -MMD -MP   -c $< -o $@  
 	
-
 $(OBJDIR)/%.o: $(SRCDIR)/%.cpp
+	@echo ""
 	@echo "######################### Compiling: "$<" #########################"
 	$(VERBOSE)$(GCC) $(CCFLAGS) $(INC_DIR) $(INCLUDES) -MMD -MP -c $< -o $@ 
 
-
-
-$(PROJECTNAME):  $(MAINOBJ) $(U1OBJS) $(OBJDIR)/dlink.o
+$(PROJECTNAME):  $(U1OBJS) $(OBJDIR)/dlink.o
+	@echo ""
+	@echo "######################### Compiling: "$(PROJECTNAME)" #########################"
 	$(VERBOSE)$(GCC) $(CCFLAGS)  -o $@ $+ $(INC_LIBS)  -fopenmp -L$(LIBDIR)/  $(LDFLAGS)
-
 
 ############################################################################################################
 ############################################################################################################

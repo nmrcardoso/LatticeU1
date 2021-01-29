@@ -13,25 +13,12 @@ complexd* Plaquette(Array<double> *dev_lat, complexd *plaq, bool print=false);
 
 
 
-class PlaqFieldArg{
-	public:
-	size_t size;
-	complexd* plaqfield;
-	complexd* plaq;
+void PlaquetteFields(Array<double> *lat, Array<complexd> **plaqfield, Array<complexd> **plaq, bool spacetime, bool evenoddOrder);
 
-	PlaqFieldArg(){
-		size = 0;
-		plaqfield = 0;
-		plaq = 0;
-	}
-	~PlaqFieldArg(){
-		if(plaqfield) dev_free(plaqfield);
-		if(plaq) host_free(plaq);
-		size = 0;	
-	}
-};
 
-void PlaquetteFields(Array<double> *lat, PlaqFieldArg* plaqfield, bool spacetime, bool evenoddOrder);
+
+
+void Fmunu(Array<double> *lat, Array<complexd> **fmunu_vol, Array<complexd> **fmunu);
 }
 
 #endif

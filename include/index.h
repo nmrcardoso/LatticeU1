@@ -11,9 +11,19 @@
 namespace U1{
 
 
+
+
+
 InlineHostDevice complexd exp_ir(const double a){
 	return complexd(cos(a), sin(a));
 }
+
+
+template<class Real>
+InlineHostDevice complexd GetValue(Real val){ return val; }
+template<> InlineHostDevice complexd GetValue<double>(double val){ return exp_ir(val);}
+template<> InlineHostDevice complexd GetValue<complexd>(complexd val){ return val;}
+
 
 
 InlineHostDevice int indexIdS(const int x[]){
@@ -77,7 +87,7 @@ InlineHostDevice int indexNO_neg(const int id, const int mu, const int lmu, cons
 
 
 
-InlineHostDevice void indexNOSD(const int id, int x[3]){
+InlineHostDevice void indexNOSD(const int id, int x[]){
 	x[2] = (id/(Grid(0) * Grid(1))) % Grid(2);
 	x[1] = (id/Grid(0)) % Grid(1);
 	x[0] = id % Grid(0);

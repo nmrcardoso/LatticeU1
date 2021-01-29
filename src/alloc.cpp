@@ -27,6 +27,7 @@ namespace U1 {
     HOST_PTR,
     PINNED_PTR,
     MAPPED_PTR,
+    MANAGED_PTR,
     N_ALLOC_TYPE
   };
 
@@ -71,6 +72,8 @@ namespace U1 {
   long mapped_allocated_peak() { return max_total_bytes[MAPPED_PTR]; }
 
   long host_allocated_peak() { return max_total_bytes[HOST_PTR]; }
+  
+  long managed_allocated_peak() { return max_total_bytes[MANAGED_PTR]; }
 
   static void print_trace (void) {
     void *array[10];
@@ -92,7 +95,7 @@ namespace U1 {
 
   static void print_alloc(AllocType type)
   {
-    const char *type_str[] = {"Device", "Device Pinned", "Host  ", "Pinned", "Mapped"};
+    const char *type_str[] = {"Device", "Device Pinned", "Host  ", "Pinned", "Mapped", "Managed"};
     std::map<void *, MemAlloc>::iterator entry;
 
     for (entry = alloc[type].begin(); entry != alloc[type].end(); entry++) {
@@ -141,6 +144,64 @@ namespace U1 {
 
 
 
+
+
+  bool use_managed_memory()
+  {
+    static bool managed = false;
+    static bool init = false;
+
+    if (!init) {
+      char *enable_managed_memory = getenv("U1_ENABLE_MANAGED_MEMORY");
+      if (enable_managed_memory && strcmp(enable_managed_memory, "1") == 0) {
+        printfU1("Warning: Using managed memory for CUDA allocations");
+        managed = true;
+        
+        
+		cudaDeviceProp deviceProp;
+		int dev;
+		cudaSafeCall(cudaGetDevice( &dev));
+		cudaGetDeviceProperties(&deviceProp, dev);
+
+        if (deviceProp.major < 6) printfU1("Warning: Using managed memory on pre-Pascal architecture is limited");
+      }
+
+      init = true;
+    }
+
+    return managed;
+  }
+
+  bool is_prefetch_enabled()
+  {
+    static bool prefetch = false;
+    static bool init = false;
+
+    if (!init) {
+      if (use_managed_memory()) {
+        char *enable_managed_prefetch = getenv("U1_ENABLE_MANAGED_PREFETCH");
+        if (enable_managed_prefetch && strcmp(enable_managed_prefetch, "1") == 0) {
+          printfU1("Warning: Enabling prefetch support for managed memory");
+          prefetch = true;
+        }
+      }
+
+      init = true;
+    }
+
+    return prefetch;
+  }
+
+
+
+
+
+
+
+
+
+
+
   /**
    * Under CUDA 4.0, cudaHostRegister seems to require that both the
    * beginning and end of the buffer be aligned on page boundaries.
@@ -177,6 +238,8 @@ namespace U1 {
    */
   void *dev_malloc_(const char *func, const char *file, int line, size_t size)
   {
+  	if (use_managed_memory()) return managed_malloc_(func, file, line, size);
+  	
     MemAlloc a(func, file, line);
     void *ptr;
 
@@ -311,8 +374,53 @@ namespace U1 {
     memset(ptr, 0, a.base_size);
     return ptr;
   }  
+  
+  
+  
+  
+  /**
+   * Perform a standard cudaMallocManaged() with error-checking.  This
+   * function should only be called via the managed_malloc() macro
+   */
+  void *managed_malloc_(const char *func, const char *file, int line, size_t size)
+  {
+    MemAlloc a(func, file, line);
+    void *ptr;
 
+    a.size = a.base_size = size;
 
+    cudaError_t err = cudaMallocManaged(&ptr, size);
+    if (err != cudaSuccess) {
+      errorU1("Failed to allocate managed memory of size %zu (%s:%d in %s())\n", size, file, line, func);
+    }
+    track_malloc(MANAGED_PTR, a, ptr);
+#ifdef HOST_DEBUG
+//#ifdef HOST_DEBUG
+    cudaError_t err1 = cudaMemset(ptr, 0, size);
+    if (err1 != cudaSuccess) {
+      printfU1("ERROR: Failed to set managed memory of size %zu (%s:%d in %s())\n", size, file, line, func);
+      errorU1("Aborting\n");
+    }
+#endif
+    return ptr;
+  }
+
+  /**
+   * Free device memory allocated with device_malloc().  This function
+   * should only be called via the device_free() macro, defined in
+   * malloc_quda.h
+   */
+  void managed_free_(const char *func, const char *file, int line, void *ptr)
+  {
+    if (!ptr) { errorU1("Attempt to free NULL managed pointer (%s:%d in %s())\n", file, line, func); }
+    if (!alloc[MANAGED_PTR].count(ptr)) {
+      errorU1("Attempt to free invalid managed pointer (%s:%d in %s())\n", file, line, func);
+    }
+    cudaError_t err = cudaFree(ptr);
+    if (err != cudaSuccess) { errorU1("Failed to free device memory (%s:%d in %s())\n", file, line, func); }
+    track_free(MANAGED_PTR, ptr);
+  }
+  
   /**
    * Free device memory allocated with dev_malloc().  This function
    * should only be called via the dev_free() macro, defined in
@@ -320,6 +428,10 @@ namespace U1 {
    */
   void dev_free_(const char *func, const char *file, int line, void *ptr)
   {
+    if (use_managed_memory()) {
+      managed_free_(func, file, line, ptr);
+      return;
+    }
     if (!ptr) {
       printfU1("ERROR: Attempt to free NULL device pointer (%s:%d in %s())\n", file, line, func);
       errorU1("Aborting\n");
@@ -417,6 +529,7 @@ namespace U1 {
   	printfU1("----------------------------------------------------------\n");
     printfU1("Device memory used = %.1f MB\n", max_total_bytes[DEVICE_PTR] / (double)(1<<20));
     printfU1("Pinned device memory used = %.1f MB\n", max_total_bytes[DEVICE_PINNED_PTR] / (double)(1<<20));
+    printfU1("Managed memory used = %.1f MB\n", max_total_bytes[MANAGED_PTR] / (double)(1 << 20));
     printfU1("Page-locked host memory used = %.1f MB\n", max_total_pinned_bytes / (double)(1<<20));
     printfU1("Total host memory used >= %.1f MB\n", max_total_host_bytes / (double)(1<<20));
   	printfU1("----------------------------------------------------------\n");
@@ -468,6 +581,17 @@ namespace U1 {
 
   }
 
+
+  void *get_mapped_device_pointer_(const char *func, const char *file, int line, const void *host)
+  {
+    void *device;
+    auto error = cudaHostGetDevicePointer(&device, const_cast<void *>(host), 0);
+    if (error != cudaSuccess) {
+      errorU1("cudaHostGetDevicePointer failed with error %s (%s:%d in %s()",
+                cudaGetErrorString(error), file, line, func);
+    }
+    return device;
+  }
 
 
 

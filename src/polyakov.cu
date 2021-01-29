@@ -89,7 +89,6 @@ complexd dev_polyakov(double *dev_lat, complexd *dev_poly, int threads, int bloc
 } 
 
 
-using namespace U1;
 
 class CalcPolyakov: Tunable{
 private:
@@ -142,8 +141,8 @@ public:
    double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
    long long flop() const { return 0;}
    long long bytes() const{ return 0;}
-   double time(){	return timesec;}
-   void stat(){	cout << "OverRelaxation:  " <<  time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
+   double get_time(){	return timesec;}
+   void stat(){	cout << "CalcPolyakov:  " <<  get_time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
   TuneKey tuneKey() const {
     std::stringstream vol, aux;
     vol << PARAMS::Grid[0] << "x";
@@ -409,11 +408,8 @@ complexd* poly2_mhit(double *dev_lat){
 
 
 
-
-
-
-template< bool multihit>
-__global__ void kernel_polyakov_volume(double *lat, complexd *poly){
+template<class Real,  bool multihit>
+__global__ void kernel_polyakov_volume(Real *lat, complexd *poly){
     size_t id = threadIdx.x + blockDim.x * blockIdx.x;
    
 	if( id >= SpatialVolume() ) return;
@@ -433,16 +429,16 @@ __global__ void kernel_polyakov_volume(double *lat, complexd *poly){
 			res *= MultiHit(lat, pos, oddbit, TDir());
 		}
 		else{
-			res *= exp_ir(lat[ indexId(x, TDir()) ]);
+			res *= GetValue<Real>(lat[ indexId(x, TDir()) ]);
 		}
 	}
 	poly[indexIdS(x)] = res;
 }
 
-template< bool multihit>
+template<class Real, bool multihit>
 class Polyakov_Vol: Tunable{
 private:
-	Array<double>* lat;
+	Array<Real>* lat;
 	Array<complexd>* poly;
 	int size;
 	double timesec;
@@ -457,10 +453,10 @@ private:
    unsigned int minThreads() const { return size; }
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-	kernel_polyakov_volume<multihit><<<tp.grid, tp.block, tp.shared_bytes, stream>>>(lat->getPtr(), poly->getPtr());
+	kernel_polyakov_volume<Real, multihit><<<tp.grid, tp.block, 0, stream>>>(lat->getPtr(), poly->getPtr());
 }
 public:
-   Polyakov_Vol(Array<double>* lat) : lat(lat) {
+   Polyakov_Vol(Array<Real>* lat) : lat(lat) {
 	size = SpatialVolume();
 	poly = new Array<complexd>(Device, SpatialVolume() );
 	timesec = 0.0;  
@@ -485,8 +481,8 @@ public:
    double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
    long long flop() const { return 0;}
    long long bytes() const{ return 0;}
-   double time(){	return timesec;}
-   void stat(){	cout << "OverRelaxation:  " <<  time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
+   double get_time(){	return timesec;}
+   void stat(){	cout << "Polyakov_Vol:  " <<  get_time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
   TuneKey tuneKey() const {
     std::stringstream vol, aux;
     vol << PARAMS::Grid[0] << "x";
@@ -590,8 +586,8 @@ public:
    double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
    long long flop() const { return 0;}
    long long bytes() const{ return 0;}
-   double time(){	return timesec;}
-   void stat(){	cout << "OverRelaxation:  " <<  time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
+   double get_time(){	return timesec;}
+   void stat(){	cout << "PP:  " <<  get_time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
   TuneKey tuneKey() const {
     std::stringstream vol, aux;
     vol << PARAMS::Grid[0] << "x";
@@ -614,17 +610,17 @@ public:
 
 
 
-
-Array<complexd>* Poly2(Array<double> *lat, bool multihit){
+template<class Real>
+Array<complexd>* Poly2(Array<Real> *lat, bool multihit){
 	int radius = Grid(0)/2;
 	
 	Array<complexd>* poly = 0;
 	if(multihit){
-		Polyakov_Vol<true> pvol(lat);
+		Polyakov_Vol<Real, true> pvol(lat);
 		poly = pvol.Run();
 	}
 	else{
-		Polyakov_Vol<false> pvol(lat);
+		Polyakov_Vol<Real, false> pvol(lat);
 		poly = pvol.Run();
 	}
 	PP pp(poly, radius);
@@ -643,15 +639,17 @@ Array<complexd>* Poly2(Array<double> *lat, bool multihit){
 	fileout.precision(12);
 		
 	for(int r = 0; r < radius; ++r){
-		cout << r+1 << '\t' << poly2->getPtr()[r].real() << '\t' << poly2->getPtr()[r].imag() << endl;
-		fileout << r+1 << '\t' << poly2->getPtr()[r].real() << '\t' << poly2->getPtr()[r].imag() << endl;
+		cout << r+1 << '\t' << poly2->at(r).real() << '\t' << poly2->at(r).imag() << endl;
+		fileout << r+1 << '\t' << poly2->at(r).real() << '\t' << poly2->at(r).imag() << endl;
 	}
 	
 	fileout.close();	
 	
 	//host_free(poly2);
 	return poly2;
-} 
+}
+template Array<complexd>* Poly2<double>(Array<double> *lat, bool multihit);
+template Array<complexd>* Poly2<complexd>(Array<complexd> *lat, bool multihit);
 
 
 }

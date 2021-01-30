@@ -6,7 +6,8 @@
 #include <cuda.h>
 #include <curand.h>
 #include <curand_kernel.h>
-#include "cuda_error_check.h"
+#include <cuda_error_check.h>
+#include <object.h>
 
 #if defined(XORWOW)
 typedef struct curandStateXORWOW cuRNGState;
@@ -30,7 +31,7 @@ cuRNGState* Init_Device_RNG(int seed, size_t size);
 
 
 
-class CudaRNG{
+class CudaRNG : public Object{
 	private:
 	cuRNGState *ptr;
 	cuRNGState *ptr_;
@@ -62,7 +63,7 @@ class CudaRNG{
 
 
 
-class CudaRNG1{
+class CudaRNG1 : public Object{
 	public:
     curandGenerator_t gen;
     
@@ -81,8 +82,7 @@ class CudaRNG1{
 	CudaRNG1(){ ptr = 0; size = 0; ptr_ = 0;}
 	CudaRNG1(int seed, size_t size):seed(seed), size(size){
 		ptr = (double2*)dev_malloc(size*sizeof(double2));
-		//CURAND_RNG_PSEUDO_MRG32K3A, CURAND_RNG_PSEUDO_MTGP32
-		//curandSafeCall(curandCreateGenerator(&gen, CURAND_RNG_PSEUDO_MT19937));
+		//CURAND_RNG_PSEUDO_MRG32K3A, CURAND_RNG_PSEUDO_MTGP32, CURAND_RNG_PSEUDO_MT19937
 		curandSafeCall(curandCreateGenerator(&gen, CURAND_RNG_PSEUDO_MT19937));
     	curandSafeCall(curandSetPseudoRandomGeneratorSeed(gen, seed));
 		ptr_ = 0;

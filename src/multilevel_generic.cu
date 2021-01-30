@@ -41,7 +41,7 @@ namespace MLgeneric{
 
 
 template<bool multihit>
-__global__ void kernel_l2_multilevel_11(double *lat, complexd *l2, int radius, int nl0){
+__global__ void kernel_l2_multilevel_11(double *lat, complexd *l2, int Rmax, int nl0){
     size_t id = threadIdx.x + blockDim.x * blockIdx.x;    
 	if(id >= SpatialVolume()) return;	
 	
@@ -54,7 +54,7 @@ __global__ void kernel_l2_multilevel_11(double *lat, complexd *l2, int radius, i
 	indexEO(id, parity, x);
 	
 	int nlayers = Grid(TDir())/nl0;
-	for(int r = 1; r <= radius; ++r){	
+	for(int r = 0; r < Rmax; ++r){	
 		for(int dir = 0; dir < TDir(); dir++){		
 			int layer = 0;
 			for(int t = 0; t < Grid(TDir()); t+=nl0){
@@ -83,7 +83,7 @@ __global__ void kernel_l2_multilevel_11(double *lat, complexd *l2, int radius, i
 					x[dir] = xold;
 				}			
 				complexd pl= pl0 * pl1;			
-				int pos = indexIdS(x) + SpatialVolume() * (r-1) + SpatialVolume() * radius * dir + SpatialVolume() * radius * (Dirs()-1) * layer;
+				int pos = indexIdS(x) + SpatialVolume() * r + SpatialVolume() * Rmax * dir + SpatialVolume() * Rmax * (Dirs()-1) * layer;
 				l2[pos] = pl + l2[pos];
 				layer++;
 			}
@@ -99,7 +99,7 @@ private:
 	Array<complexd> *l2;
 	int nl0;
 	size_t sl2;
-	int radius;
+	int Rmax;
 	int size;
 	double timesec;
 #ifdef TIMMINGS
@@ -113,10 +113,10 @@ private:
    unsigned int minThreads() const { return size; }
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-	kernel_l2_multilevel_11<multihit><<<tp.grid, tp.block, tp.shared_bytes, stream>>>(lat->getPtr(), l2->getPtr(), radius, nl0);
+	kernel_l2_multilevel_11<multihit><<<tp.grid, tp.block, tp.shared_bytes, stream>>>(lat->getPtr(), l2->getPtr(), Rmax, nl0);
 }
 public:	
-   L2ML1(Array<double> *lat, Array<complexd> *l2, size_t sl2, int radius, int nl0) : lat(lat), l2(l2), sl2(sl2), radius(radius), nl0(nl0) {
+   L2ML1(Array<double> *lat, Array<complexd> *l2, size_t sl2, int Rmax, int nl0) : lat(lat), l2(l2), sl2(sl2), Rmax(Rmax), nl0(nl0) {
 	size = SpatialVolume();
 	timesec = 0.0;  
 }
@@ -188,14 +188,14 @@ public:
 
 
 
-__global__ void kernel_l2_multilevel_1(complexd *poly, complexd *l2, int radius, int nl0){
+__global__ void kernel_l2_multilevel_1(complexd *poly, complexd *l2, int Rmax, int nl0){
     size_t id = threadIdx.x + blockDim.x * blockIdx.x;    
 	if(id >= SpatialVolume()) return;		
 	int x[4];
 	indexNOSD(id, x);
 	
 	int nlayers = Grid(TDir())/nl0;
-	for(int r = 1; r <= radius; ++r){	
+	for(int r = 0; r < Rmax; ++r){	
 		for(int dir = 0; dir < TDir(); dir++){		
 			int layer = 0;
 			for(int t = 0; t < Grid(TDir()); t+=nl0){
@@ -210,7 +210,7 @@ __global__ void kernel_l2_multilevel_1(complexd *poly, complexd *l2, int radius,
 					x[dir] = xold;
 				}			
 				complexd pl= pl0 * pl1;			
-				int pos = id + SpatialVolume() * (r-1) + SpatialVolume() * radius * dir + SpatialVolume() * radius * (Dirs()-1) * layer;
+				int pos = id + SpatialVolume() * r + SpatialVolume() * Rmax * dir + SpatialVolume() * Rmax * (Dirs()-1) * layer;
 				l2[pos] = pl + l2[pos];
 				layer++;
 			}
@@ -233,7 +233,7 @@ private:
 	Array<complexd> *l2;
 	int nl0;
 	size_t sl2;
-	int radius;
+	int Rmax;
 	int size;
 	double timesec;
 #ifdef TIMMINGS
@@ -247,10 +247,10 @@ private:
    unsigned int minThreads() const { return size; }
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-	kernel_l2_multilevel_1<<<tp.grid, tp.block, tp.shared_bytes, stream>>>(poly->getPtr(), l2->getPtr(), radius, nl0);
+	kernel_l2_multilevel_1<<<tp.grid, tp.block, tp.shared_bytes, stream>>>(poly->getPtr(), l2->getPtr(), Rmax, nl0);
 }
 public:	
-   L2ML(Array<complexd> *poly, Array<complexd> *l2, size_t sl2, int radius, int nl0) : poly(poly), l2(l2), sl2(sl2), radius(radius), nl0(nl0) {
+   L2ML(Array<complexd> *poly, Array<complexd> *l2, size_t sl2, int Rmax, int nl0) : poly(poly), l2(l2), sl2(sl2), Rmax(Rmax), nl0(nl0) {
 	size = SpatialVolume();
 	timesec = 0.0;  
 }
@@ -303,9 +303,9 @@ public:
 
 
 
-__global__ void kernel_l2avg_l4_multilevel(complexd *dev_l2, complexd *dev_l4, int radius, double l2norm, int nl0, int nl1){
+__global__ void kernel_l2avg_l4_multilevel(complexd *dev_l2, complexd *dev_l4, int Rmax, double l2norm, int nl0, int nl1){
     size_t id = threadIdx.x + blockDim.x * blockIdx.x;
-    size_t size = SpatialVolume() * radius * (Dirs()-1);
+    size_t size = SpatialVolume() * Rmax * (Dirs()-1);
     if(id >= size) return;			
 	
 	int nl2 = Grid(TDir())/nl0;
@@ -331,7 +331,7 @@ private:
 	int nl0, nl1;
 	double l2norm;
 	size_t sl4;
-	int radius;
+	int Rmax;
 	int size;
 	double timesec;
 #ifdef TIMMINGS
@@ -345,11 +345,11 @@ private:
    unsigned int minThreads() const { return size; }
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-	kernel_l2avg_l4_multilevel<<<tp.grid, tp.block, 0, stream>>>(l2->getPtr(), l4->getPtr(), radius, l2norm, nl0, nl1);
+	kernel_l2avg_l4_multilevel<<<tp.grid, tp.block, 0, stream>>>(l2->getPtr(), l4->getPtr(), Rmax, l2norm, nl0, nl1);
 }
 public:	
-   L2AvgL4ML(Array<complexd> *l2, Array<complexd> *l4, size_t sl4, int radius, double l2norm, int nl0, int nl1) : l2(l2), l4(l4), sl4(sl4), radius(radius), l2norm(l2norm), nl0(nl0), nl1(nl1) {
-	size = SpatialVolume() * radius * (Dirs()-1);
+   L2AvgL4ML(Array<complexd> *l2, Array<complexd> *l4, size_t sl4, int Rmax, double l2norm, int nl0, int nl1) : l2(l2), l4(l4), sl4(sl4), Rmax(Rmax), l2norm(l2norm), nl0(nl0), nl1(nl1) {
+	size = SpatialVolume() * Rmax * (Dirs()-1);
 	timesec = 0.0;  
 }
    ~L2AvgL4ML(){ };
@@ -399,21 +399,21 @@ public:
 
 
 template<bool savePPspace>
-__global__ void kernel_l4avg_Final_multilevel(complexd *dev_l4, complexd *res, complexd *ppSpace, int radius, double norm, int nl1){
+__global__ void kernel_l4avg_Final_multilevel(complexd *dev_l4, complexd *res, complexd *ppSpace, int Rmax, double norm, int nl1){
     size_t id = threadIdx.x + blockDim.x * blockIdx.x;    				
 	
 	int nl4 = Grid(TDir())/nl1;	
-	for(int r = 0; r < radius; ++r)	{
+	for(int r = 0; r < Rmax; ++r)	{
 		complexd pp = 0.;
 		if( id < SpatialVolume() ){
 			for(int dir = 0; dir < TDir(); dir++){
 				complexd pl = 1.;
 				for(int l4 = 0; l4 < nl4; ++l4){
-					int newid = id + SpatialVolume() * r + SpatialVolume() * radius * dir + SpatialVolume() * radius * (Dirs()-1) * l4;
+					int newid = id + SpatialVolume() * r + SpatialVolume() * Rmax * dir + SpatialVolume() * Rmax * (Dirs()-1) * l4;
 					pl *= dev_l4[newid] * norm;
 				}
 				pp += pl;
-				if(savePPspace) ppSpace[id + SpatialVolume() * r + SpatialVolume() * radius * dir] = pl;
+				if(savePPspace) ppSpace[id + SpatialVolume() * dir + SpatialVolume() * (Dirs()-1) * r] = pl;
 			}
 		}
 		reduce_block_1d<complexd>(res + r, pp);
@@ -428,7 +428,7 @@ private:
 	Array<complexd> *dev_poly;
 	Array<complexd> *poly;
 	int nl1;
-	int radius;
+	int Rmax;
 	double norm;
 	double l4norm;
 	int size;
@@ -445,18 +445,18 @@ private:
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
 	dev_poly->Clear();
-	if(savePPspace) kernel_l4avg_Final_multilevel<savePPspace><<<tp.grid, tp.block, tp.shared_bytes, stream>>>(l4->getPtr(), dev_poly->getPtr(), ppSpace->getPtr(), radius, l4norm, nl1);
-	else kernel_l4avg_Final_multilevel<savePPspace><<<tp.grid, tp.block, tp.shared_bytes, stream>>>(l4->getPtr(), dev_poly->getPtr(), 0, radius, l4norm, nl1);
+	if(savePPspace) kernel_l4avg_Final_multilevel<savePPspace><<<tp.grid, tp.block, tp.shared_bytes, stream>>>(l4->getPtr(), dev_poly->getPtr(), ppSpace->getPtr(), Rmax, l4norm, nl1);
+	else kernel_l4avg_Final_multilevel<savePPspace><<<tp.grid, tp.block, tp.shared_bytes, stream>>>(l4->getPtr(), dev_poly->getPtr(), 0, Rmax, l4norm, nl1);
 }
 public:
 	Array<complexd> *ppSpace;
 	Array<complexd>* getField(){ return ppSpace; }
 	
-   L4AvgPP(Array<complexd> *l4, int radius, double l4norm, int nl1) : l4(l4), radius(radius), l4norm(l4norm), nl1(nl1) {
+   L4AvgPP(Array<complexd> *l4, int Rmax, double l4norm, int nl1) : l4(l4), Rmax(Rmax), l4norm(l4norm), nl1(nl1) {
 	size = SpatialVolume();
-	dev_poly = new Array<complexd>(Device, radius);
-	if(savePPspace) ppSpace = new Array<complexd>(Device, SpatialVolume() * radius * (Dirs()-1));
-	poly = new Array<complexd>(Host, radius);
+	dev_poly = new Array<complexd>(Device, Rmax);
+	if(savePPspace) ppSpace = new Array<complexd>(Device, SpatialVolume() * Rmax * (Dirs()-1));
+	poly = new Array<complexd>(Host, Rmax);
 	norm = 1. / double(SpatialVolume()*(Dirs()-1));
 	timesec = 0.0;  
 }
@@ -467,7 +467,7 @@ public:
 #endif
 	apply(stream);
 	poly->Copy(dev_poly);
-	for(int i = 0; i < radius; ++i) poly->getPtr()[i] *= norm;
+	for(int i = 0; i < Rmax; ++i) poly->getPtr()[i] *= norm;
     cudaDevSync();
     cudaCheckError("Kernel execution failed");
 #ifdef TIMMINGS
@@ -510,20 +510,23 @@ public:
 Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int nl0, int nl1, int n4, int k4, int n2, int k2, int metrop, int ovrn, int Rmax, bool PrintResultsAtEveryN4){
 	Timer a0; a0.start();
 	
+	cout << "==============================================" << endl;
 	cout << "Rmax: " << Rmax << endl;
+	cout << "----------------------------------------------" << endl;
 	cout << "Level 0:" << endl;
 	cout << "\tNº time links per slice: " << nl0 << endl;
 	cout << "\tNº iterations: " << n2 << endl;
 	cout << "\tNº updates: " << k2 << endl;
 	cout << "\tNº metropolis updates: " << metrop << endl;
 	cout << "\tNº overrelaxation updates: " << ovrn << endl;
-	
+	cout << "----------------------------------------------" << endl;
 	cout << "Level 1:" << endl;
 	cout << "\tNº time links per slice: " << nl1 << endl;
 	cout << "\tNº iterations: " << n4 << endl;
 	cout << "\tNº updates: " << k4 << endl;
 	cout << "\tNº metropolis updates: " << metrop << endl;
 	cout << "\tNº overrelaxation updates: " << ovrn << endl;
+	cout << "==============================================" << endl;
 	
 	if( Grid(TDir())%nl1 != 0  || Grid(TDir())%nl0 != 0  || nl1%nl0 != 0 ) {
 		cout << "Error: Cannot Apply MultiLevel Algorithm...\nExiting..." << endl;
@@ -607,8 +610,8 @@ Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int nl0, int
 	fileout.precision(12);
 	
 	for(int r = 0; r < Rmax; ++r){
-		cout << r+1 << '\t' << res->at(r) << endl;
-		fileout << r+1 << '\t' << res->at(r) << endl;
+		cout << r << '\t' << res->at(r) << endl;
+		fileout << r << '\t' << res->at(r) << endl;
 	}
 	
 	fileout.close();
@@ -626,20 +629,23 @@ Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, int nl0, int
 void MultiLevelField(Array<double> *lat, CudaRNG *rng_state, Array<complexd> **pp, Array<complexd> **ppfield, int nl0, int nl1, int n4, int k4, int n2, int k2, int metrop, int ovrn, int Rmax, bool PrintResultsAtEveryN4){
 	Timer a0; a0.start();
 	
+	cout << "==============================================" << endl;
 	cout << "Rmax: " << Rmax << endl;
+	cout << "----------------------------------------------" << endl;
 	cout << "Level 0:" << endl;
 	cout << "\tNº time links per slice: " << nl0 << endl;
 	cout << "\tNº iterations: " << n2 << endl;
 	cout << "\tNº updates: " << k2 << endl;
 	cout << "\tNº metropolis updates: " << metrop << endl;
 	cout << "\tNº overrelaxation updates: " << ovrn << endl;
-	
+	cout << "----------------------------------------------" << endl;
 	cout << "Level 1:" << endl;
 	cout << "\tNº time links per slice: " << nl1 << endl;
 	cout << "\tNº iterations: " << n4 << endl;
 	cout << "\tNº updates: " << k4 << endl;
 	cout << "\tNº metropolis updates: " << metrop << endl;
 	cout << "\tNº overrelaxation updates: " << ovrn << endl;
+	cout << "==============================================" << endl;
 		
 	
 	if( Grid(TDir())%nl1 != 0  || Grid(TDir())%nl0 != 0  || nl1%nl0 != 0 ) {
@@ -730,8 +736,8 @@ void MultiLevelField(Array<double> *lat, CudaRNG *rng_state, Array<complexd> **p
 	cout << std::setprecision(14);
 	
 	for(int r = 0; r < Rmax; ++r){
-		cout << r+1 << '\t' << (*pp)->at(r) << endl;
-		fileout << r+1 << '\t' << (*pp)->at(r) << endl;
+		cout << r << '\t' << (*pp)->at(r) << endl;
+		fileout << r << '\t' << (*pp)->at(r) << endl;
 	}
 	
 	fileout.close();

@@ -34,7 +34,7 @@ class Array : public Object{
 		ptr_backup = 0;
 		Allocate(&ptr, location, size);
 	}
-	virtual ~Array(){ Release(); }
+	~Array(){ Release(); }
 	
 	Real*  getPtr(){ return ptr; }
 	

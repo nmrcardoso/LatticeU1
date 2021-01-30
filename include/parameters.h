@@ -8,6 +8,7 @@
 #include <cuda.h>
 #include <curand_kernel.h>
 #include "cuda_error_check.h"
+#include <verbose.h>
 
 
 namespace U1{
@@ -29,12 +30,6 @@ typedef struct curandStateMRG32k3a cuRNGState;
 
 
 
-
-TuneMode getTuning();
-Verbosity getVerbosity();
-
-void setTuning(TuneMode kerneltunein);
-void setVerbosity(Verbosity verbosein);
 
 dim3 GetBlockDim(size_t threads, size_t size);
 

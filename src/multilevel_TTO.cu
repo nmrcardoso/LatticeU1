@@ -139,8 +139,8 @@ inline __host__ __device__ void GetFields(const complexd *plaqfield, int pos, in
 }
 
 
-__global__ void kernel_l2_multilevel_1(complexd *plaqfield, complexd *poly, complexd *l2, complexd *lo2, int radius, bool SquaredField, bool alongCharges, int perpPoint){
-    size_t id = threadIdx.x + blockDim.x * blockIdx.x;    
+__global__ void kernel_l2_multilevel_1(complexd *plaqfield, complexd *poly, complexd *l2, complexd *lo2, int radius, bool SquaredField, bool alongCharges, int2 perpPoint){
+    uint id = threadIdx.x + blockDim.x * blockIdx.x;    
 	if(id >= SpatialVolume()) return;		
 	int x[4];
 	indexNOSD(id, x);
@@ -167,8 +167,8 @@ __global__ void kernel_l2_multilevel_1(complexd *plaqfield, complexd *poly, comp
 				x[TDir()] = t + tt;				
 				
 				int rad = radius/2;				
-				//int evenradius = !(radius%2);	
-				int evenradius = !(radius & 1);
+				//int evenradius = (radius+1)%2;	
+				int evenradius = (radius+1) & 1;
 								
 				int dirz = dir;				//Z
 				int dirx = (dirz+1)%TDir();  //X
@@ -177,25 +177,28 @@ __global__ void kernel_l2_multilevel_1(complexd *plaqfield, complexd *poly, comp
 				int pos = 0;
 				complexd field[6];
 				if(alongCharges){
-					int xold = x[dirz];
-					int xold1 = x[dirx];
+					int xoldx = x[dirx];
+					int xoldy = x[diry];
+					int xoldz = x[dirz];
 					x[dirz] = (x[dirz] + rad + iz - Grid(dirz)/2 + Grid(dirz)) % Grid(dirz);									
-					x[dirx] = (x[dirx] + perpPoint + Grid(dirx)) % Grid(dirx);
+					x[dirx] = (x[dirx] + perpPoint.x + Grid(dirx)) % Grid(dirx);
+					x[diry] = (x[diry] + perpPoint.y + Grid(diry)) % Grid(diry);
 					pos = indexId(x); 	
-					x[dirz] = xold;
-					x[dirx] = xold1;
+					x[dirx] = xoldx;
+					x[diry] = xoldy;
+					x[dirz] = xoldz;
 				}
 				else{
-					int xold = x[dirz];
-					int xold1 = x[dirx];
-					int xold2 = x[diry];
-					x[dirz] = (x[dirz] + rad) % Grid(dirz);					
+					int xoldx = x[dirx];
+					int xoldy = x[diry];
+					int xoldz = x[dirz];
+					x[dirz] = (x[dirz] + rad + perpPoint.y + Grid(dirz)) % Grid(dirz);					
 					x[dirx] = (x[dirx] + iz - Grid(dirx)/2 + Grid(dirx)) % Grid(dirx);
-					x[diry] = (x[diry] + perpPoint + Grid(diry)) % Grid(diry);
+					x[diry] = (x[diry] + perpPoint.x + Grid(diry)) % Grid(diry);					
 					pos = indexId(x); 	
-					x[dirz] = xold;
-					x[dirx] = xold1;
-					x[diry] = xold2;
+					x[dirx] = xoldx;
+					x[diry] = xoldy;
+					x[dirz] = xoldz;
 				}	
 				GetFields(plaqfield, pos, dirx, diry, dirz, evenradius, field); 
 				
@@ -255,7 +258,7 @@ private:
 	size_t sl2;
 	int radius;
 	int size;
-	int perpPoint;
+	int2 perpPoint;
 	bool SquaredField;
 	bool alongCharges;
 	double timesec;
@@ -273,7 +276,7 @@ private:
 	kernel_l2_multilevel_1<<<tp.grid, tp.block, tp.shared_bytes, stream>>>(plaqfield->getPtr(), poly->getPtr(), l2->getPtr(), lo2->getPtr(), radius, SquaredField, alongCharges, perpPoint);
 }
 public:	
-   L2ML(Array<complexd> *plaqfield, Array<complexd> *poly, Array<complexd> *l2, Array<complexd> *lo2, size_t sl2, int radius, bool SquaredField, bool alongCharges, int perpPoint) : plaqfield(plaqfield), poly(poly), l2(l2), lo2(lo2), sl2(sl2), radius(radius), SquaredField(SquaredField), alongCharges(alongCharges), perpPoint(perpPoint) {
+   L2ML(Array<complexd> *plaqfield, Array<complexd> *poly, Array<complexd> *l2, Array<complexd> *lo2, size_t sl2, int radius, bool SquaredField, bool alongCharges, int2 perpPoint) : plaqfield(plaqfield), poly(poly), l2(l2), lo2(lo2), sl2(sl2), radius(radius), SquaredField(SquaredField), alongCharges(alongCharges), perpPoint(perpPoint) {
 	size = SpatialVolume();
 	timesec = 0.0;  
 }
@@ -695,23 +698,35 @@ public:
 
 
 
-Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int n4, int k4, int n2, int k2, int metrop, int ovrn, int radius, bool SquaredField, bool alongCharges, bool symmetrize, int perpPoint){
+Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int n4, int k4, int n2, int k2, int metrop, int ovrn, int radius, bool SquaredField, bool alongCharges, bool symmetrize, int2 perpPoint){
 	Timer a0; a0.start();
 
-	cout << "R: " << radius << endl;
+	cout << "==============================================" << endl;
 	cout << "Level 0:" << endl;
 	cout << "\tNº time links per slice: " << 2 << endl;
 	cout << "\tNº iterations: " << n2 << endl;
 	cout << "\tNº updates: " << k2 << endl;
 	cout << "\tNº metropolis updates: " << metrop << endl;
 	cout << "\tNº overrelaxation updates: " << ovrn << endl;
-	
+	cout << "----------------------------------------------" << endl;	
 	cout << "Level 1:" << endl;
 	cout << "\tNº time links per slice: " << 4 << endl;
 	cout << "\tNº iterations: " << n4 << endl;
 	cout << "\tNº updates: " << k4 << endl;
 	cout << "\tNº metropolis updates: " << metrop << endl;
 	cout << "\tNº overrelaxation updates: " << ovrn << endl;
+	cout << "----------------------------------------------" << endl;	
+	cout << "R: " << radius << endl;
+	cout << "Charges at z direction, (-R/2, R/2)"<< endl;
+	if(alongCharges) cout << "Results at (" << perpPoint.x << ", " << perpPoint.y << ", z)." << endl;
+	else cout << "Results at (x, " << perpPoint.x << ", " << perpPoint.y << ")." << endl;
+	cout << "----------------------------------------------" << endl;	
+	if(SquaredField) cout << "Squared Fields." << endl;
+	else cout << "Non-squared Fields." << endl;
+	if(alongCharges) cout << "Results along the charges." << endl;
+	else cout << "Results perpendicular of the charges at the middle of the charges." << endl;
+	if(symmetrize) cout << "Symmetrizing the results." << endl;
+	cout << "==============================================" << endl;
 	
 	if(Dirs() < 4){
 		cout << "Only implemented for 4D lattice..." << endl;
@@ -722,9 +737,9 @@ Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int n4, i
 		cout << "Error: Cannot Apply MultiLevel Algorithm...\n Nt is not multiple of 4...\n Exiting..." << endl;
 		exit(1);
 	}
-	
-	if(perpPoint > Grid(0)/2-1 || perpPoint < -Grid(0)/2){
-		cout << "Perpendicular point (" << perpPoint << ") should be between [" << -Grid(0)/2 << ":" << Grid(0)/2-1 << "]" << endl;
+
+	if(perpPoint.x > Grid(0)/2-1 || perpPoint.x < -Grid(0)/2 || perpPoint.y > Grid(0)/2-1 || perpPoint.y < -Grid(0)/2){
+		cout << "Perpendicular points (" << perpPoint.x << ", " << perpPoint.y <<") should be between [" << -Grid(0)/2 << ":" << Grid(0)/2-1 << "]" << endl;
 		exit(0);
 	}
 	
@@ -815,7 +830,7 @@ Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int n4, i
 	filename += "_" + ToString(n2) + "_" + ToString(k2);
 	filename += "_" + ToString(metrop) + "_" + ToString(ovrn);
 	filename += "_radius_" + ToString(radius);
-	filename += "_pP_" + ToString(perpPoint);
+	filename += "_p(" + ToString(perpPoint.x) + "," + ToString(perpPoint.y) + ",z)";
 	if(SquaredField) filename += "_squared";
 	if(alongCharges) filename += "_chargeplane";
 	if(symmetrize) filename += "_sym";
@@ -872,7 +887,7 @@ Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int n4, i
 
 }
 
-Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int n4, int k4, int n2, int k2, int metrop, int ovrn, int radius, bool SquaredField, bool alongCharges, bool symmetrize, int perpPoint){
+Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int n4, int k4, int n2, int k2, int metrop, int ovrn, int radius, bool SquaredField, bool alongCharges, bool symmetrize, int2 perpPoint){
 	return ML_TTO::MultiLevelTTO(lat, rng_state, n4, k4, n2, k2, metrop, ovrn, radius, SquaredField, alongCharges, symmetrize, perpPoint);
 }
 

@@ -69,24 +69,13 @@ __global__ void kernel_polyakov(double *lat, complexd *poly){
 			double tmp = 0.;
 			for(x[TDir()] = 0; x[TDir()] < Grid(TDir()); ++x[TDir()])
 				tmp += lat[ indexId(x, TDir()) ];
-			poly0.real() += cos(tmp);
-			poly0.imag() += sin(tmp);
+			poly0 += exp_ir(tmp);
 		}
 	}
 	reduce_block_1d<complexd>(poly, poly0);
 }
 
 
-
-complexd dev_polyakov(double *dev_lat, complexd *dev_poly, int threads, int blocks){
-	complexd poly;
-	cudaSafeCall(cudaMemset(dev_poly, 0, sizeof(complexd)));
-	kernel_polyakov<<<blocks, threads, threads*sizeof(complexd)>>>(dev_lat, dev_poly);
-	cudaSafeCall(cudaMemcpy(&poly, dev_poly, sizeof(complexd), cudaMemcpyDeviceToHost));
-	poly /= double(SpatialVolume());
-	cout << "\t\t" << "L: " << poly.real() << '\t' << poly.imag() << "\t|L|: " << poly.abs() << endl;
-	return poly;
-} 
 
 
 
@@ -171,233 +160,6 @@ complexd Polyakov(Array<double> *dev_lat, bool print){
 	if(print) cout << "L: " << poly.real() << '\t' << poly.imag() << "\t|L|: " << poly.abs() << endl;
 	return poly;
 } 
-
-
-
-
-
-
-__global__ void kernel_polyakov_volume(double *lat, double *poly){
-    size_t id = threadIdx.x + blockDim.x * blockIdx.x;
-	if( id >= SpatialVolume() ) return;
-	int parity = 0;
-	if( id >= SpatialVolume()/2 ){
-		parity = 1;	
-		id -= SpatialVolume()/2;
-	}	
-	int x[4];
-	indexEO(id, parity, x);
-	
-	double tmp = 0.;
-	for(x[TDir()] = 0; x[TDir()] < Grid(TDir()); ++x[TDir()]){
-		tmp += lat[ indexId(x, TDir()) ];
-	}
-	poly[indexIdS(x)] = tmp;
-
-}
-
-
-__global__ void kernel_poly2(double *poly, complexd *poly2, int radius){
-    size_t id = threadIdx.x + blockDim.x * blockIdx.x;
-    
-	double pl0 = 0.;
-	if(id < SpatialVolume()) pl0 = poly[id];			
-	int x[3];
-	indexNOSD(id, x);
-	for(int r = 1; r <= radius; ++r){	
-		complexd pl = 0.;
-		if(id < SpatialVolume()){
-			for(int dir = 0; dir < TDir(); dir++){
-				int xold = x[dir];
-				x[dir] = (x[dir] + r) % Grid(dir);
-				double pl1 = poly[indexIdS(x)];
-				pl1 = pl0-pl1;
-				pl.real() += cos(pl1);
-				pl.imag() += sin(pl1);	
-				//pl += exp_ir(pl0) * conj(exp_ir(pl1));				
-				x[dir] = xold;
-			}
-		}				
-		reduce_block_1d<complexd>(poly2 + r - 1, pl);
-		__syncthreads();
-	}
-}
-
-__global__ void kernel_poly21(double *poly, complexd *poly2, int radius){
-    size_t id = threadIdx.x + blockDim.x * blockIdx.x;
-    
-	complexd pl0 = 0.;
-	if(id < SpatialVolume()) pl0 = exp_ir(poly[id]);			
-	int x[3];
-	indexNOSD(id, x);
-	for(int r = 1; r <= radius; ++r){	
-		complexd pl = 0.;
-		if(id < SpatialVolume()){
-			for(int dir = 0; dir < TDir(); dir++){
-				int xold = x[dir];
-				x[dir] = (x[dir] + r) % Grid(dir);
-				double pl1 = poly[indexIdS(x)];
-				//pl1 = pl0-pl1;
-				//pl.real() += cos(pl1);
-				//pl.imag() += sin(pl1);	
-				pl += pl0*conj(exp_ir(pl1));				
-				x[dir] = xold;
-			}
-		}				
-		reduce_block_1d<complexd>(poly2 + r - 1, pl);
-		__syncthreads();
-	}
-}
-
-
-complexd* poly2(double *dev_lat){
-	int radius = Grid(0)/2;
-	double *dev_poly_vol = (double*)dev_malloc(SpatialVolume()*sizeof(double));
-	complexd *dev_poly2 = (complexd*)dev_malloc(radius*sizeof(complexd));
-	complexd *poly2 = (complexd*)safe_malloc(radius*sizeof(complexd));
-	
-	
-	int threads = 128;
-	//int blocks0 = (HalfVolume() + threads - 1) / threads;
-	int blocks0 = (SpatialVolume() + threads - 1) / threads;
-	int blocks1 = (SpatialVolume() + threads - 1) / threads;
-	size_t smem = threads * sizeof(complexd);
-	
-	
-	kernel_polyakov_volume<<<blocks0, threads>>>(dev_lat, dev_poly_vol);
-	//cudaSafeCall(cudaMemset(dev_poly2, 0, radius*sizeof(complexd)));
-	kernel_poly2<<<blocks1, threads, smem>>>(dev_poly_vol, dev_poly2, radius);
-	cudaSafeCall(cudaMemcpy(poly2, dev_poly2, radius*sizeof(complexd), cudaMemcpyDeviceToHost));
-	
-	
-	
-
-	std::ofstream fileout;
-	std::string filename = "Pot_" + GetLatticeName() + ".dat";
-	fileout.open (filename.c_str());
-	if (!fileout.is_open()) {
-		std::cout << "Error opening file: " << filename << std::endl;
-		exit(1);
-	}
-	fileout.precision(12);
-		
-	for(int r = 0; r < radius; ++r){
-		poly2[r] /= double(SpatialVolume()*(Dirs()-1));
-		cout << r+1 << '\t' << poly2[r].real() << '\t' << poly2[r].imag() << endl;
-		fileout << r+1 << '\t' << poly2[r].real() << '\t' << poly2[r].imag() << endl;
-	}
-	fileout.close();	
-	
-	dev_free(dev_poly2);
-	dev_free(dev_poly_vol);
-	//host_free(poly2);
-	return poly2;
-} 
-
-
-
-
-
-
-
-
-
-__global__ void kernel_polyakov_volume_mhit(double *lat, complexd *poly){
-    size_t id = threadIdx.x + blockDim.x * blockIdx.x;
-   
-	if( id >= SpatialVolume() ) return;
-	int parity = 0;
-	if( id >= SpatialVolume()/2 ){
-		parity = 1;	
-		id -= SpatialVolume()/2;
-	}	
-	int x[4];
-	indexEO(id, parity, x);
-	
-	complexd res = 1.;
-	for(x[TDir()] = 0; x[TDir()] < Grid(TDir()); ++x[TDir()]){
-		int pos = indexId(x) >> 1;
-		int oddbit = GetParity(x);
-		res *= MultiHit(lat, pos, oddbit, TDir());
-	}
-	poly[indexIdS(x)] = res;
-
-}
-
-__global__ void kernel_poly2_mhit(complexd *poly, complexd *poly2, int radius){
-    size_t id = threadIdx.x + blockDim.x * blockIdx.x;
-    
-	complexd pl0 = 0.;
-	if(id < SpatialVolume()) pl0 = poly[id];			
-	int x[3];
-	indexNOSD(id, x);
-	for(int r = 1; r <= radius; ++r){	
-		complexd pl = 0.;
-		if(id < SpatialVolume()){
-			for(int dir = 0; dir < TDir(); dir++){
-				int xold = x[dir];
-				x[dir] = (x[dir] + r) % Grid(dir);
-				complexd pl1 = poly[indexIdS(x)];
-				pl += pl0 * conj(pl1);				
-				x[dir] = xold;
-			}
-		}				
-		reduce_block_1d<complexd>(poly2 + r - 1, pl);
-		__syncthreads();
-	}
-}
-
-
-complexd* poly2_mhit(double *dev_lat){
-	int radius = Grid(0)/2;
-	complexd *dev_poly_vol = (complexd*)dev_malloc(SpatialVolume()*sizeof(complexd));
-	complexd *dev_poly2 = (complexd*)dev_malloc(radius*sizeof(complexd));
-	complexd *poly2 = (complexd*)safe_malloc(radius*sizeof(complexd));
-		
-	int threads = 128;
-	//int blocks0 = (HalfVolume() + threads - 1) / threads;
-	int blocks0 = (SpatialVolume() + threads - 1) / threads;
-	int blocks1 = (SpatialVolume() + threads - 1) / threads;
-	size_t smem = threads * sizeof(complexd);
-	
-	
-	kernel_polyakov_volume_mhit<<<blocks0, threads>>>(dev_lat, dev_poly_vol);
-	//cudaSafeCall(cudaMemset(dev_poly2, 0, radius*sizeof(complexd)));
-	kernel_poly2_mhit<<<blocks1, threads, smem>>>(dev_poly_vol, dev_poly2, radius);
-	cudaSafeCall(cudaMemcpy(poly2, dev_poly2, radius*sizeof(complexd), cudaMemcpyDeviceToHost));
-	
-	std::ofstream fileout;
-	std::string filename = "Pot_mhit_" + GetLatticeName() + ".dat";
-	fileout.open (filename.c_str());
-	if (!fileout.is_open()) {
-		std::cout << "Error opening file: " << filename << std::endl;
-		exit(1);
-	}
-	fileout.precision(12);
-		
-	for(int r = 0; r < radius; ++r){
-		poly2[r] /= double(SpatialVolume()*(Dirs()-1));
-		cout << r+1 << '\t' << poly2[r].real() << '\t' << poly2[r].imag() << endl;
-		fileout << r+1 << '\t' << poly2[r].real() << '\t' << poly2[r].imag() << endl;
-	}
-	
-	fileout.close();	
-	
-	
-	
-	
-	//host_free(poly2);
-	dev_free(dev_poly2);
-	dev_free(dev_poly_vol);
-	return poly2;
-} 
-
-
-
-
-
-
-
 
 
 
@@ -506,26 +268,29 @@ public:
 
 
 
-
-__global__ void kernel_PP(complexd *poly, complexd *res, int radius){
+template<bool savePPspace>
+__global__ void kernel_PP(complexd *poly, complexd *pp, complexd *ppspace, int Rmax){
     size_t id = threadIdx.x + blockDim.x * blockIdx.x;
     
 	complexd pl0 = 0.;
 	if(id < SpatialVolume()) pl0 = poly[id];			
 	int x[3];
 	indexNOSD(id, x);
-	for(int r = 1; r <= radius; ++r){	
+	for(int r = 0; r < Rmax; ++r){	
 		complexd pl = 0.;
 		if(id < SpatialVolume()){
 			for(int dir = 0; dir < TDir(); dir++){
 				int xold = x[dir];
 				x[dir] = (x[dir] + r) % Grid(dir);
 				complexd pl1 = poly[indexIdS(x)];
-				pl += pl0 * conj(pl1);				
+				complexd pll = pl0 * conj(pl1);				
 				x[dir] = xold;
+				if(savePPspace) ppspace[id + SpatialVolume() * dir + SpatialVolume() * (Dirs()-1) *r] = pl;
+				pl += pll;
 			}
+			
 		}				
-		reduce_block_1d<complexd>(res + r - 1, pl);
+		reduce_block_1d<complexd>(pp + r, pl);
 		__syncthreads();
 	}
 }
@@ -533,12 +298,14 @@ __global__ void kernel_PP(complexd *poly, complexd *res, int radius){
 
 
 
+template<bool savePPspace>
 class PP: Tunable{
 private:
 	Array<complexd> *pvol;
 	Array<complexd> *poly;
+	Array<complexd> *ppspace;
 	Array<complexd> *dev_poly;
-	int radius;
+	int Rmax;
 	double norm;
 	int size;
 	double timesec;
@@ -554,24 +321,27 @@ private:
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
 	dev_poly->Clear();
-	kernel_PP<<<tp.grid, tp.block, tp.shared_bytes, stream>>>(pvol->getPtr(), dev_poly->getPtr(), radius);
+	if(savePPspace) kernel_PP<savePPspace><<<tp.grid, tp.block, tp.shared_bytes, stream>>>(pvol->getPtr(), dev_poly->getPtr(), ppspace->getPtr(), Rmax);
+	else kernel_PP<savePPspace><<<tp.grid, tp.block, tp.shared_bytes, stream>>>(pvol->getPtr(), dev_poly->getPtr(), 0, Rmax);
 }
 public:
-   PP(Array<complexd> *pvol, int radius) : pvol(pvol), radius(radius) {
+   PP(Array<complexd> *pvol, int Rmax) : pvol(pvol), Rmax(Rmax) {
 	size = SpatialVolume();
-	dev_poly = new Array<complexd>(Device, radius);
-	poly = new Array<complexd>(Host, radius);
+	dev_poly = new Array<complexd>(Device, Rmax);
+	poly = new Array<complexd>(Host, Rmax);
 	norm = 1. / double(SpatialVolume()*(Dirs()-1));
+	if(savePPspace) ppspace = new Array<complexd>(Device, SpatialVolume() * Rmax * (Dirs()-1));
 	timesec = 0.0;  
 }
    ~PP(){ delete dev_poly;};
+   Array<complexd>* Get_PPspace(){ return ppspace; }
    Array<complexd>* Run(const cudaStream_t &stream){
 #ifdef TIMMINGS
     time.start();
 #endif
 	apply(stream);
 	poly->Copy(dev_poly);
-	for(int i = 0; i < radius; ++i) poly->getPtr()[i] *= norm;
+	for(int i = 0; i < Rmax; ++i) poly->getPtr()[i] *= norm;
     cudaDevSync();
     cudaCheckError("Kernel execution failed");
 #ifdef TIMMINGS
@@ -612,7 +382,7 @@ public:
 
 template<class Real>
 Array<complexd>* Poly2(Array<Real> *lat, bool multihit){
-	int radius = Grid(0)/2;
+	int Rmax = Grid(0)/2+1;
 	
 	Array<complexd>* poly = 0;
 	if(multihit){
@@ -623,7 +393,7 @@ Array<complexd>* Poly2(Array<Real> *lat, bool multihit){
 		Polyakov_Vol<Real, false> pvol(lat);
 		poly = pvol.Run();
 	}
-	PP pp(poly, radius);
+	PP<false> pp(poly, Rmax);
 	Array<complexd>* poly2 = pp.Run();
 	if(poly) delete poly;
 	
@@ -636,20 +406,64 @@ Array<complexd>* Poly2(Array<Real> *lat, bool multihit){
 		std::cout << "Error opening file: " << filename << std::endl;
 		exit(1);
 	}
+	fileout << std::scientific;
 	fileout.precision(12);
 		
-	for(int r = 0; r < radius; ++r){
-		cout << r+1 << '\t' << poly2->at(r).real() << '\t' << poly2->at(r).imag() << endl;
-		fileout << r+1 << '\t' << poly2->at(r).real() << '\t' << poly2->at(r).imag() << endl;
+	for(int r = 0; r < Rmax; ++r){
+		cout << r << '\t' << poly2->at(r).real() << '\t' << poly2->at(r).imag() << endl;
+		fileout << r << '\t' << poly2->at(r).real() << '\t' << poly2->at(r).imag() << endl;
 	}
 	
 	fileout.close();	
-	
-	//host_free(poly2);
 	return poly2;
 }
 template Array<complexd>* Poly2<double>(Array<double> *lat, bool multihit);
 template Array<complexd>* Poly2<complexd>(Array<complexd> *lat, bool multihit);
+
+
+
+
+template<class Real>
+void Poly2(Array<Real> *lat, Array<complexd> **poly2, Array<complexd> **ppspace, bool multihit){
+	int Rmax = Grid(0)/2;
+	
+	Array<complexd>* poly = 0;
+	if(multihit){
+		Polyakov_Vol<Real, true> pvol(lat);
+		poly = pvol.Run();
+	}
+	else{
+		Polyakov_Vol<Real, false> pvol(lat);
+		poly = pvol.Run();
+	}
+	PP<true> calc_pp(poly, Rmax);
+	*poly2 = calc_pp.Run();
+	*ppspace = calc_pp.Get_PPspace();
+	if(poly) delete poly;
+	
+	std::ofstream fileout;
+	std::string filename = "";
+	if(multihit) filename = "Pot_mhit_" + GetLatticeNameI() + ".dat";
+	else filename = "Pot_" + GetLatticeNameI() + ".dat";
+	fileout.open (filename.c_str());
+	if (!fileout.is_open()) {
+		std::cout << "Error opening file: " << filename << std::endl;
+		exit(1);
+	}
+	fileout << std::scientific;
+	fileout.precision(12);
+		
+	for(int r = 0; r < Rmax; ++r){
+		cout << r << '\t' << (*poly2)->at(r).real() << '\t' << (*poly2)->at(r).imag() << endl;
+		fileout << r << '\t' << (*poly2)->at(r).real() << '\t' << (*poly2)->at(r).imag() << endl;
+	}
+	
+	fileout.close();	
+}
+template void Poly2<double>(Array<double> *lat, Array<complexd> **poly2, Array<complexd> **ppspace, bool multihit);
+template void Poly2<complexd>(Array<complexd> *lat, Array<complexd> **poly2, Array<complexd> **ppspace, bool multihit);
+
+
 
 
 }

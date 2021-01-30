@@ -5,34 +5,39 @@
 
 #include <iostream>
 #include <alloc.h>
+#include <verbose.h>
 
 namespace U1 {
   
-  class Object {
-    
-    
+class Object {
   public:
     inline Object() { }
     inline virtual ~Object() { }
     
     inline static void* operator new(std::size_t size) {
-      //std::cout << "Allocate pointer: " << std::endl;
-      return safe_malloc(size);
+      void *ptr = safe_malloc(size);
+      if (getVerbosity() >= DEBUG_VERBOSE) 
+      	std::cout << "Allocate pointer: " << ptr << std::endl;
+      return ptr;
     }
     
-    inline static void operator delete(void* p) {
-      //std::cout << "Release pointer: " << p << std::endl;
-      host_free(p);
+    inline static void operator delete(void* ptr) {
+      if (getVerbosity() >= DEBUG_VERBOSE) 
+      	std::cout << "Release pointer: " << ptr << std::endl;
+      host_free(ptr);
     }
   
     inline static void* operator new[](std::size_t size) {
-      //std::cout << "Allocate pointer: " << std::endl;
-      return safe_malloc(size);
+      void *ptr = safe_malloc(size);
+      if (getVerbosity() >= DEBUG_VERBOSE) 
+      	std::cout << "Allocate pointer: " << ptr << std::endl;
+      return ptr;
     }
   
-    inline static void operator delete[](void* p) {
-      //std::cout << "Release pointer: " << p << std::endl;
-      host_free(p);
+    inline static void operator delete[](void* ptr) {
+      if (getVerbosity() >= DEBUG_VERBOSE) 
+      	std::cout << "Release pointer: " << ptr << std::endl;
+      host_free(ptr);
     }
   };
 

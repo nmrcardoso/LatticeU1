@@ -39,11 +39,12 @@ Array<complexd>* GetPPFields(Array<complexd> *pp, Array<complexd> *ppfield, Arra
 	CalcChromoFieldPP(ppfield, plaqfield, field, Rmax, nx, ny, chargeplane);
 	int plane = nx * ny;
 	int fsize = 6 * plane;
-	for(int r = 0; r < Rmax; r++){
+	double Rmin = 2; //Only makes sense to calculate for r >= 2
+	for(int r = Rmin; r < Rmax; r++){
 		ofstream fieldsout;
 		string fname = "ChromoField_";
 		if(!chargeplane) fname = "ChromoField_mid_";
-		fname += GetLatticeNameI() + "_r_" + ToString(r+1) + ".dat";;
+		fname += GetLatticeNameI() + "_r_" + ToString(r) + ".dat";;
 		fieldsout.open(fname, ios::out);
 		if (!fieldsout.is_open()) {
 			cout << "Cannot create file: " << fname << endl;
@@ -99,7 +100,7 @@ void Calc_PPFields(Array<double>* lattice, CudaRNG *rng){
 	PlaquetteFields(latno, plaqfield, true, false);
 	delete plaqfield;*/
 	
-	int Rmax = Grid(0)/2;
+	int Rmax = Grid(0)/2+1;
 	Array<complexd> *plaqfield; //This array is allocated and filled in PlaquetteFields
 	Array<complexd> *plaqf; //This array is allocated and filled in PlaquetteFields
 	PlaquetteFields(latno, &plaqfield, &plaqf, false, false);
@@ -133,7 +134,8 @@ Array<complexd>* GetWLFields(Array<complexd> *wl, Array<complexd> *wlfield, Arra
 	CalcChromoFieldWL(wlfield, plaqfield, field, Rmax, Tmax, nx, ny, chargeplane);
 	int plane = nx * ny;
 	int fsize = 6 * plane;
-	for(int r = 0; r < Rmax; r++){
+	double Rmin = 2; //Only makes sense to calculate for r >= 2
+	for(int r = Rmin; r < Rmax; r++){
 		ofstream fieldsout;
 		string fname = "ChromoField_";
 		if(!chargeplane) fname = "ChromoField_mid_";
@@ -206,7 +208,8 @@ int main(){
 	
 	//omp_set_num_threads(1);
 	int gpuID = 0;
-	Start(gpuID, DEBUG_VERBOSE, TUNE_YES); // Important. Setup GPU id and setup tune kernels and verbosity level. See cuda_error_check.cpp/.h
+	//Start(gpuID, DEBUG_VERBOSE, TUNE_YES); 
+	Start(gpuID, VERBOSE, TUNE_YES); // Important. Setup GPU id and setup tune kernels and verbosity level. See cuda_error_check.cpp/.h
 	
 	int dirs = 4; //Need to update kernels to take into account less than 4 directions
 	int ls = 24; //The number of points in each direction must be an even number!!!!!!!!!
@@ -322,12 +325,29 @@ int main(){
 		
 		
 		if(1)if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
-			int Rmax = Grid(0)/2;
+		
+			//Calc_PPFields(lattice, rng);
+			
+			Timer p0,p1;
+			cout << "########### P(0)*conj(P(r)) #####################" << endl;
+			p0.start();
+			Array<complexd>* res = Poly2(lattice, false);
+			delete res;
+			p0.stop();
+			std::cout << "p0: " << p0.getElapsedTime() << " s" << endl;	
+			cout << "########### P(0)*conj(P(r)) Using MultiHit #####################" << endl;
+			p1.start();
+			res = Poly2(lattice, true);
+			delete res;
+			p1.stop();
+			std::cout << "p1: " << p1.getElapsedTime() << " s" << endl;
+			cout << "########### P(0)*conj(P(r)) Using MultiLevel #####################" << endl;		
+			int Rmax = Grid(0)/2+1;
 			CudaRNG *rng11 = new CudaRNG(seed, HalfVolume());
-			Array<complexd>* rresults = MLgeneric::MultiLevel(lattice, rng11, 2, 12, 5, 10, 20, 5, 1, 3, Rmax, false);
+			Array<complexd>* rresults = MLgeneric::MultiLevel(lattice, rng11, 2, 4, 5, 10, 20, 5, 1, 3, Rmax, false);
 			delete rng11; delete rresults;
 			rng11 = new CudaRNG(seed, HalfVolume());
-			rresults = MLgeneric::MultiLevel(lattice, rng11, 2, 4, 5, 10, 20, 5, 1, 3, Rmax, false);
+			rresults = MultiLevel(lattice, rng11, 5, 10, 20, 5, 1, 3, Rmax, false);
 			delete rng11; delete rresults;
 		}
 		
@@ -343,7 +363,7 @@ int main(){
 					bool SquaredField = true;
 					bool alongCharges = false; 
 					bool symmetrize = false;
-					int perpPoint = 0;
+					int2 perpPoint = make_int2(0,0);
 					Array<complexd>* res0 = MultiLevelTTO(lattice, rng11, 5, 16, 5, 5, 2, 5, radius, SquaredField, alongCharges, symmetrize, perpPoint);
 					delete res0;
 				}
@@ -360,7 +380,7 @@ int main(){
 					bool SquaredField = true;
 					bool alongCharges = false; 
 					bool symmetrize = false;
-					int perpPoint = 0;
+					int2 perpPoint = make_int2(0,0);
 					Array<complexd>* res0 = ML_TTO_generic::MultiLevelTTO(lattice, rng11, 2, 4, 5, 16, 5, 5, 2, 5, radius, SquaredField, alongCharges, symmetrize, perpPoint);
 					delete res0;
 				}
@@ -551,7 +571,7 @@ int main(){
 					bool SquaredField = true;
 					bool alongCharges = false; 
 					bool symmetrize = false;
-					int perpPoint = 0;
+					int2 perpPoint = make_int2(0,0);
 					Array<complexd>* res0 = MultiLevelTTO(lattice, rng, 10, 16, 50, 5, 2, 5, radius, SquaredField, alongCharges, symmetrize, perpPoint);
 					delete res0;
 				}

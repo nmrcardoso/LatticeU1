@@ -41,6 +41,7 @@ struct ChromoFieldArg{
   complexd *pl;
   complexd *plaq;
   int volume;
+  int Rmin;
   int Rmax;
   int Tmax;
   int nx;
@@ -57,7 +58,7 @@ __global__ void kernel_ChromoField(ChromoFieldArg arg){
 		
 	int fieldoffset = arg.nx * arg.ny; 
 		  
-for(int radius = 0; radius < arg.Rmax; radius++){
+for(int radius = arg.Rmin; radius < arg.Rmax; radius++){
 for(int t = 0; t < arg.Tmax; t++){
 
   int radiusoffset = 6 * fieldoffset * radius +  6 * fieldoffset * arg.Rmax * t;
@@ -117,7 +118,7 @@ for(int t = 0; t < arg.Tmax; t++){
 		  for(int dd = 0; dd < 6; dd++){
 		  	// TOCHECK!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 		  	field[dd].real() *= loop.real();   //Ex^2
-		  	field[dd].imag() *= loop.real();   //Ey^2
+		  	field[dd].imag() *= loop.real();   //Ex
 		  }
 		   
 		  complexd aggregate[6];
@@ -128,7 +129,7 @@ for(int t = 0; t < arg.Tmax; t++){
 		  if (threadIdx.x == 0){
 		  //accum Ex^2
 		    int id0 = ix + iy * arg.nx;
-		    CudaAtomicAdd(arg.field + id0, aggregate[0]);
+		    CudaAtomicAdd(arg.field + id0 + radiusoffset, aggregate[0]);
 		    int id1 =  ((ix + 1) % arg.nx) + iy * arg.nx;
 		    CudaAtomicAdd(arg.field + id1 + radiusoffset, aggregate[0]);
 		  //accum Ey^2
@@ -193,7 +194,7 @@ for(int t = 0; t < arg.Tmax; t++){
 		  for(int dd = 0; dd < 6; dd++){
 		  	// TOCHECK!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 		  	field[dd].real() *= loop.real();   //Ex^2
-		  	field[dd].imag() *= loop.real();   //Ey^2	  
+		  	field[dd].imag() *= loop.real();   //Ex	  
 		  }
 		  complexd aggregate[6];
 		  for(int dd = 0; dd < 6; dd++){
@@ -253,7 +254,7 @@ __global__ void kernel_ChromoFieldMidFluxTube(ChromoFieldArg arg){
 		
 	int fieldoffset = arg.nx * arg.ny; 
 		  
-for(int radius = 0; radius < arg.Rmax; radius++){
+for(int radius = arg.Rmin; radius < arg.Rmax; radius++){
 for(int t = 0; t < arg.Tmax; t++){
 
   int radiusoffset = 6 * fieldoffset * radius +  6 * fieldoffset * arg.Rmax * t;
@@ -314,7 +315,7 @@ for(int t = 0; t < arg.Tmax; t++){
 		  } 
 		  for(int dd = 0; dd < 6; dd++){
 		  	field[dd].real() *= loop.real();   //Ex^2
-		  	field[dd].imag() *= loop.real();   //Ey^2
+		  	field[dd].imag() *= loop.real();   //Ex
 		  }
 		   
 		  complexd aggregate[6];
@@ -389,7 +390,7 @@ for(int t = 0; t < arg.Tmax; t++){
 		    
 		  for(int dd = 0; dd < 6; dd++){
 		  	field[dd].real() *= loop.real();   //Ex^2
-		  	field[dd].imag() *= loop.real();   //Ey^2		  
+		  	field[dd].imag() *= loop.real();   //Ex		  
 		  }
 		  complexd aggregate[6];
 		  for(int dd = 0; dd < 6; dd++){
@@ -464,13 +465,14 @@ private:
 }
 
 public:
-   ChromoField(Array<complexd> *wloop, Array<complexd> *plaqfield, Array<complexd> *chromofield, int Rmax, int Tmax, int nx, int ny, int volume): chromofield(chromofield){
+   ChromoField(Array<complexd> *wloop, Array<complexd> *plaqfield, Array<complexd> *chromofield, int Rmin, int Rmax, int Tmax, int nx, int ny, int volume): chromofield(chromofield){
 	size = volume;
 	timesec = 0.0;
 	arg.nx = nx;
 	arg.ny = ny;
 	arg.volume = volume;
 	arg.Rmax = Rmax;
+	arg.Rmax = Rmin;
 	arg.Tmax = Tmax;
 	arg.wloop = wloop->getPtr();
 	arg.plaq = plaqfield->getPtr();
@@ -538,10 +540,10 @@ public:
 
 
 template<bool chargeplane>
-void CalcChromoField(Array<complexd> *wloop, Array<complexd> *plaqfield, Array<complexd> *field, int Rmax, int Tmax, int nx, int ny, int volume){
+void CalcChromoField(Array<complexd> *wloop, Array<complexd> *plaqfield, Array<complexd> *field, int Rmin, int Rmax, int Tmax, int nx, int ny, int volume){
 	Timer mtime;
 	mtime.start(); 
-	ChromoField<chargeplane> cfield(wloop, plaqfield, field, Rmax, Tmax, nx, ny, volume);
+	ChromoField<chargeplane> cfield(wloop, plaqfield, field, Rmin, Rmax, Tmax, nx, ny, volume);
 	cfield.Run();
 	cudaDevSync( );
 	mtime.stop();
@@ -551,24 +553,24 @@ void CalcChromoField(Array<complexd> *wloop, Array<complexd> *plaqfield, Array<c
 
 
 
-void CalcChromoFieldWL(Array<complexd> *wloop, Array<complexd> *plaqfield, Array<complexd> *field, int Rmax, int Tmax, int nx, int ny, bool chargeplane){
+void CalcChromoFieldWL(Array<complexd> *wloop, Array<complexd> *plaqfield, Array<complexd> *field, int Rmin, int Rmax, int Tmax, int nx, int ny, bool chargeplane){
 	if(Dirs() < 4){
 		cout << "Only implemented for 4D lattice..." << endl;
 		Finalize(1);
 	}
-	if(chargeplane) CalcChromoField<true>(wloop, plaqfield, field, Rmax, Tmax, nx, ny, Volume());
-	else CalcChromoField<false>(wloop, plaqfield, field, Rmax, Tmax, nx, ny, Volume());
+	if(chargeplane) CalcChromoField<true>(wloop, plaqfield, field, Rmin, Rmax, Tmax, nx, ny, Volume());
+	else CalcChromoField<false>(wloop, plaqfield, field, Rmin, Rmax, Tmax, nx, ny, Volume());
 }
 
 
 
-void CalcChromoFieldPP(Array<complexd> *ploop, Array<complexd> *plaqfield, Array<complexd> *field, int Rmax, int nx, int ny, bool chargeplane){
+void CalcChromoFieldPP(Array<complexd> *ploop, Array<complexd> *plaqfield, Array<complexd> *field, int Rmin, int Rmax, int nx, int ny, bool chargeplane){
 	if(Dirs() < 4){
 		cout << "Only implemented for 4D lattice..." << endl;
 		Finalize(1);
 	}
-	if(chargeplane) CalcChromoField<true>(ploop, plaqfield, field, Rmax, 1, nx, ny, SpatialVolume());
-	else CalcChromoField<false>(ploop, plaqfield, field, Rmax, 1, nx, ny, SpatialVolume());
+	if(chargeplane) CalcChromoField<true>(ploop, plaqfield, field, Rmin, Rmax, 1, nx, ny, SpatialVolume());
+	else CalcChromoField<false>(ploop, plaqfield, field, Rmin, Rmax, 1, nx, ny, SpatialVolume());
 }
 
 

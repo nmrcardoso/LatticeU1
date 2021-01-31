@@ -35,15 +35,15 @@ using namespace U1;
 Array<complexd>* GetPPFields(Array<complexd> *pp, Array<complexd> *ppfield, Array<complexd> *plaqf, Array<complexd> *plaqfield, int Rmax, bool chargeplane){
 	int nx = Grid(0);
 	int ny = nx;
+	double Rmin = 2; //Only makes sense to calculate for r >= 2
 	Array<complexd> *field = new Array<complexd>(Host, 6 * nx * ny * Rmax);
-	CalcChromoFieldPP(ppfield, plaqfield, field, Rmax, nx, ny, chargeplane);
+	CalcChromoFieldPP(ppfield, plaqfield, field, Rmin, Rmax, nx, ny, chargeplane);
 	int plane = nx * ny;
 	int fsize = 6 * plane;
-	double Rmin = 2; //Only makes sense to calculate for r >= 2
 	for(int r = Rmin; r < Rmax; r++){
 		ofstream fieldsout;
-		string fname = "ChromoField_";
-		if(!chargeplane) fname = "ChromoField_mid_";
+		string fname = "ChromoField_PP_";
+		if(!chargeplane) fname = "ChromoField_PP_mid_";
 		fname += GetLatticeNameI() + "_r_" + ToString(r) + ".dat";;
 		fieldsout.open(fname, ios::out);
 		if (!fieldsout.is_open()) {
@@ -78,28 +78,7 @@ void Calc_PPFields(Array<double>* lattice, CudaRNG *rng){
 	complexd plaqv[2];
 	Plaquette(lattice, plaqv, true);
 	Array<double>* latno = LatticeConvert(lattice, true);
-	cout << "------------------------------" << endl;
-	/*PlaqFieldArg* plaqfield = new PlaqFieldArg;
-	PlaquetteFields(lattice, plaqfield, false, true);
-	cout << plaqfield->plaq << '\t' << plaqfield->plaqfield << endl;
-	delete plaqfield;
-	
-	cout << "------------------------------" << endl;
-	plaqfield = new PlaqFieldArg;
-	PlaquetteFields(lattice, plaqfield, true, true);
-	delete plaqfield;
-	
-	
-	cout << "------------------------------" << endl;
-	plaqfield = new PlaqFieldArg;
-	PlaquetteFields(latno, plaqfield, false, false);
-	delete plaqfield;
-	
-	cout << "------------------------------" << endl;
-	plaqfield = new PlaqFieldArg;
-	PlaquetteFields(latno, plaqfield, true, false);
-	delete plaqfield;*/
-	
+
 	int Rmax = Grid(0)/2+1;
 	Array<complexd> *plaqfield; //This array is allocated and filled in PlaquetteFields
 	Array<complexd> *plaqf; //This array is allocated and filled in PlaquetteFields
@@ -107,15 +86,19 @@ void Calc_PPFields(Array<double>* lattice, CudaRNG *rng){
 	delete latno;
 	Array<complexd> *pp; //This array is allocated and filled in MultiLevelField
 	Array<complexd> *ppfield; //This array is allocated and filled in MultiLevelField
-	MultiLevelField(lattice, rng, &pp, &ppfield, 1, 0, 1, 0, 1, 3, Rmax);
-	//MultiLevelField(lattice, rng, &pp, &ppfield, 10, 16, 100, 5, 2, 5);
-	cout << pp->Size() << '\t' << ppfield->Size() << endl;
 	
+	bool multilevel = true;
+	if(multilevel) {
+		//DON'T FORGET TO TUNE THE MULTIVEL!!!!!!!!!!!!!		
+		MultiLevelField(lattice, rng, &pp, &ppfield, 1, 0, 1, 0, 1, 3, Rmax);
+		//MultiLevelField(lattice, rng, &pp, &ppfield, 10, 16, 100, 5, 2, 5);
+	}
+	else{
+		bool multihit = true;
+		Poly2(lattice, &pp, &ppfield, true);
+	}
 	Array<complexd> *field0 = GetPPFields(pp, ppfield, plaqf, plaqfield, Rmax, true);
 	delete field0;
-	//Array<complexd> *field1 = GetPPFields(pp, ppfield, plaqf, plaqfield, Rmax, false);
-	//delete field1;
-
 	delete plaqfield;
 	delete plaqf;
 	delete pp;
@@ -130,15 +113,15 @@ void Calc_PPFields(Array<double>* lattice, CudaRNG *rng){
 Array<complexd>* GetWLFields(Array<complexd> *wl, Array<complexd> *wlfield, Array<complexd> *plaqf, Array<complexd> *plaqfield, int Rmax, int Tmax, bool chargeplane){
 	int nx = Grid(0);
 	int ny = nx;
+	double Rmin = 2; //Only makes sense to calculate for r >= 2
 	Array<complexd> *field = new Array<complexd>(Host, 6 * nx * ny * Rmax * Tmax);
-	CalcChromoFieldWL(wlfield, plaqfield, field, Rmax, Tmax, nx, ny, chargeplane);
+	CalcChromoFieldWL(wlfield, plaqfield, field, Rmin, Rmax, Tmax, nx, ny, chargeplane);
 	int plane = nx * ny;
 	int fsize = 6 * plane;
-	double Rmin = 2; //Only makes sense to calculate for r >= 2
 	for(int r = Rmin; r < Rmax; r++){
 		ofstream fieldsout;
-		string fname = "ChromoField_";
-		if(!chargeplane) fname = "ChromoField_mid_";
+		string fname = "ChromoField_WL_";
+		if(!chargeplane) fname = "ChromoField_WL_mid_";
 		fname += GetLatticeNameI() + "_r_" + ToString(r) + ".dat";;
 		fieldsout.open(fname, ios::out);
 		if (!fieldsout.is_open()) {
@@ -190,9 +173,6 @@ void Calc_WLFields(Array<double>* lattice, CudaRNG *rng){
 		
 	Array<complexd> *field0 = GetWLFields(wl, wlfield, plaqf, plaqfield, Rmax, Tmax, true);
 	delete field0;
-	//Array<complexd> *field1 = GetPPFields(pp, ppfield, plaqf, plaqfield, Rmax, false);
-	//delete field1;
-
 	delete plaqfield;
 	delete plaqf;
 	delete wl;
@@ -208,8 +188,8 @@ int main(){
 	
 	//omp_set_num_threads(1);
 	int gpuID = 0;
-	//Start(gpuID, DEBUG_VERBOSE, TUNE_YES); 
-	Start(gpuID, VERBOSE, TUNE_YES); // Important. Setup GPU id and setup tune kernels and verbosity level. See cuda_error_check.cpp/.h
+	Start(gpuID, DEBUG_VERBOSE, TUNE_YES); 
+	//Start(gpuID, VERBOSE, TUNE_YES); // Important. Setup GPU id and setup tune kernels and verbosity level. See cuda_error_check.cpp/.h
 	
 	int dirs = 4; //Need to update kernels to take into account less than 4 directions
 	int ls = 24; //The number of points in each direction must be an even number!!!!!!!!!
@@ -326,8 +306,9 @@ int main(){
 		
 		if(1)if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
 		
-			//Calc_PPFields(lattice, rng);
-			
+			Calc_PPFields(lattice, rng);
+			//Calc_WLFields(lattice, rng);
+			break;
 			Timer p0,p1;
 			cout << "########### P(0)*conj(P(r)) #####################" << endl;
 			p0.start();

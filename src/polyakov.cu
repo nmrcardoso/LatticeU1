@@ -283,10 +283,10 @@ __global__ void kernel_PP(complexd *poly, complexd *pp, complexd *ppspace, int R
 				int xold = x[dir];
 				x[dir] = (x[dir] + r) % Grid(dir);
 				complexd pl1 = poly[indexIdS(x)];
-				complexd pll = pl0 * conj(pl1);				
+				complexd pldir = pl0 * conj(pl1);				
 				x[dir] = xold;
-				if(savePPspace) ppspace[id + SpatialVolume() * dir + SpatialVolume() * (Dirs()-1) *r] = pl;
-				pl += pll;
+				if(savePPspace) ppspace[id + SpatialVolume() * dir + SpatialVolume() * (Dirs()-1) *r] = pldir;
+				pl += pldir;
 			}
 			
 		}				

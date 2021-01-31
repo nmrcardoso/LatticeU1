@@ -571,8 +571,8 @@ void MultiLevelField(Array<double> *lat, CudaRNG *rng_state, Array<complexd> **p
 	cout << "Saving data to " << filename << endl;
 	fileout << std::scientific;
 	fileout.precision(14);
-	cout << std::scientific;
-	cout << std::setprecision(14);
+	//cout << std::scientific;
+	//cout << std::setprecision(14);
 	
 	for(int r = 0; r < Rmax; ++r){
 		cout << r << '\t' << (*pp)->at(r) << endl;

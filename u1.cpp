@@ -404,7 +404,9 @@ int main(){
 				for(int i = 0; i < data.size(); i++){
 					Array<complexd>* val = data.at(i);
 					for(int r = 0; r < mean.Size(); r++) {
-						double vr = -log(mean(r)-val->at(r).real())/double(Grid(TDir()));
+						double val = mean(r)-val->at(r).real();
+						val /= double(data.size()-1);
+						double vr = -log(val)/double(Grid(TDir()));
 						trials[r].push_back(vr);
 					}
 				}			

@@ -449,9 +449,11 @@ int main(){
 		delete val;
 	}
 	
-	delete lattice;
+	/*delete lattice;
 	delete rng;
-	delete[] plaqv;
+	delete[] plaqv;*/
+	assertAllMemFree();
+	FreeAllMemory();
 	t0.stop();
 	std::cout << "Time: " << t0.getElapsedTime() << " s" << endl;
 	

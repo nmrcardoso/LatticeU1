@@ -478,8 +478,8 @@ public:
 	arg.plaq = plaqfield->getPtr();
 	field = new Array<complexd>(Device, chromofield->Size());
 	arg.field = field->getPtr();
-	cout << arg.wloop << '\t' << arg.plaq << '\t' << arg.field << endl;
-	cout << arg.nx << '\t' << arg.ny << '\t' << arg.Rmax << '\t' << arg.Tmax << endl; 
+	//cout << arg.wloop << '\t' << arg.plaq << '\t' << arg.field << endl;
+	cout << arg.nx << '\t' << arg.ny << '\t' << arg.Rmin << '\t' << arg.Rmax << '\t' << arg.Tmax << endl; 
 }
    ~ChromoField(){delete field;}
    void Run(const cudaStream_t &stream){

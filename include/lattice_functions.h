@@ -118,7 +118,6 @@ inline   __device__ __host__ void SixPlaquette(const double *lat, complexd *plaq
 
 InlineHostDevice double MetropolisFunc(double *lat, const int id, const int parity, const int mu, double new_phase){
 	double phase_old = lat[id + parity * HalfVolume() + mu * Volume()];
-	int idmu1 = indexEO_neg(id, parity, mu, 1);
 	complexd staple = Staple(lat, id, parity, mu);			
 	double r = staple.abs();
 	double t2 = atan2(staple.imag(), staple.real());

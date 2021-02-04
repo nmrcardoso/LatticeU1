@@ -472,7 +472,7 @@ public:
 	arg.ny = ny;
 	arg.volume = volume;
 	arg.Rmax = Rmax;
-	arg.Rmax = Rmin;
+	arg.Rmin = Rmin;
 	arg.Tmax = Tmax;
 	arg.wloop = wloop->getPtr();
 	arg.plaq = plaqfield->getPtr();
@@ -494,7 +494,7 @@ public:
 	int plane = arg.nx * arg.ny;
 	int fsize = 6 * plane;
 	for(int t = 0; t < arg.Tmax; t++)
-	for(int r = 0; r < arg.Rmax; r++){
+	for(int r = arg.Rmin; r < arg.Rmax; r++){
 		int id = r + arg.Rmax * t;
 		for(int f = 0; f < fsize; f++)
 		  chromofield->at(f + id * fsize) /= double(6 * size);

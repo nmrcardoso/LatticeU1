@@ -160,7 +160,7 @@ void SetupLatticeParameters(int Nx, int Ny, int Nz, int Nt, int dirs, double bet
 	if(Dirs()==4) PARAMS::Grid[3] = Nt;
 	
 	
-	for(int i = 1; i < PARAMS::DIRS; ++i){
+	for(int i = 0; i < PARAMS::DIRS; ++i){
 		if( (Grid(i)%2) != 0 ){
 			std::cout << "Error: Number of points should be an even number..." << std::endl;
 			Finalize(1);

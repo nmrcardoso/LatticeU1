@@ -37,107 +37,8 @@ namespace ML_TTO_generic{
 
 
 #include "multilevel_generic_common.cuh"
+#include "multilevel_TTO.cuh"
 
-
-//Defined only for charges along z direction
-inline __host__ __device__ void GetFields(const complexd *plaqfield, int pos, int dirx, int diry, int dirz, bool evenradius, complexd field[6]) {	
-	if(evenradius){
-		//Ex
-		complexd plaq = plaqfield[pos + dirx * Volume()];
-		int s1 = indexNO_neg(pos, dirx, -1);
-		plaq += plaqfield[s1 + dirx * Volume()];
-		field[0] = plaq * 0.5;
-		//Ey
-		plaq = plaqfield[pos + diry * Volume()];
-		s1 = indexNO_neg(pos, diry, -1);
-		plaq += plaqfield[s1 + diry * Volume()];
-		field[1] = plaq * 0.5;
-		//Ez
-		plaq = plaqfield[pos + dirz * Volume()];
-		s1 = indexNO_neg(pos, dirz, -1);
-		plaq += plaqfield[s1 + dirz * Volume()];
-		field[2] = plaq * 0.5;
-		//Bx
-		plaq = plaqfield[pos + (3 + dirx) * Volume()];
-		s1 = indexNO_neg(pos, dirz, -1);
-		plaq += plaqfield[s1 + (3 + dirx) * Volume()];
-		s1 = indexNO_neg(pos, diry, -1);
-		plaq += plaqfield[s1 + (3 + dirx) * Volume()];
-		s1 = indexNO_neg(s1, dirz, -1);
-		plaq += plaqfield[s1 + (3 + dirx) * Volume()];
-		field[3] = plaq * 0.25;
-		//By
-		plaq = plaqfield[pos + (3 + diry) * Volume()];
-		s1 = indexNO_neg(pos, dirz, -1);
-		plaq += plaqfield[s1 + (3 + diry) * Volume()];
-		s1 = indexNO_neg(pos, dirx, -1);
-		plaq += plaqfield[s1 + (3 + diry) * Volume()];
-		s1 = indexNO_neg(s1, dirz, -1);
-		plaq += plaqfield[s1 + (3 + diry) * Volume()];
-		field[4] = plaq * 0.25;
-		//Bz
-		plaq = plaqfield[pos + (3 + dirz) * Volume()];
-		s1 = indexNO_neg(pos, dirx, -1);
-		plaq += plaqfield[s1 + (3 + dirz) * Volume()];
-		s1 = indexNO_neg(pos, diry, -1);
-		plaq += plaqfield[s1 + (3 + dirz) * Volume()];
-		s1 = indexNO_neg(s1, dirx, -1);
-		plaq += plaqfield[s1 + (3 + dirz) * Volume()];
-		field[5] = plaq * 0.25;
-	}
-	else{
-		//Valid for mid and charge plane
-		//Valid only for odd radius
-		//Ex
-		complexd plaq = plaqfield[pos + dirx * Volume()];
-		int s1 = indexNO_neg(pos, dirx, -1);
-		plaq += plaqfield[s1 + dirx * Volume()];
-		s1 = indexNO_neg(pos, dirz, 1);
-		plaq += plaqfield[s1 + dirx * Volume()];
-		s1 = indexNO_neg(s1, dirx, -1);
-		plaq += plaqfield[s1 + dirx * Volume()];
-		field[0] = plaq * 0.25;
-		//Ey
-		plaq = plaqfield[pos + diry * Volume()];
-		s1 = indexNO_neg(pos, diry, -1);
-		plaq += plaqfield[s1 + diry * Volume()];
-		s1 = indexNO_neg(pos, dirz, 1);
-		plaq += plaqfield[s1 + diry * Volume()];
-		s1 = indexNO_neg(s1, diry, -1);
-		plaq += plaqfield[s1 + diry * Volume()];
-		field[1] = plaq * 0.25;
-		//Ez
-		plaq = plaqfield[pos + dirz * Volume()];
-		field[2] = plaq;
-		//Bx
-		plaq = plaqfield[pos + (3 + dirx) * Volume()];
-		s1 = indexNO_neg(s1, diry, -1);
-		plaq += plaqfield[s1 + (3 + dirx) * Volume()];
-		field[3] = plaq * 0.5;
-		//By
-		plaq = plaqfield[pos + (3 + diry) * Volume()];
-		s1 = indexNO_neg(s1, dirx, -1);
-		plaq += plaqfield[s1 + (3 + diry) * Volume()];
-		field[4] = plaq * 0.5;
-		//Bz
-		plaq = plaqfield[pos + (3 + dirz) * Volume()]; 
-		s1 = indexNO_neg(pos, dirx, -1);
-		plaq += plaqfield[s1 + (3 + dirz) * Volume()]; 
-		s1 = indexNO_neg(pos, diry, -1);
-		plaq += plaqfield[s1 + (3 + dirz) * Volume()];
-		s1 = indexNO_neg(s1, dirx, -1);
-		plaq += plaqfield[s1 + (3 + dirz) * Volume()]; 
-		int s2 = indexNO_neg(pos, dirz, 1);
-		plaq += plaqfield[s2 + (3 + dirz) * Volume()]; 
-		s1 = indexNO_neg(s2, dirx, -1);
-		plaq += plaqfield[s1 + (3 + dirz) * Volume()];
-		s1 = indexNO_neg(s2, diry, -1);
-		plaq += plaqfield[s1 + (3 + dirz) * Volume()];
-		s1 = indexNO_neg(s1, dirx, -1);
-		plaq += plaqfield[s1 + (3 + dirz) * Volume()];
-		field[5] = plaq * 0.125;
-	}
-}
 
 
 __global__ void kernel_l2_multilevel_1(complexd *plaqfield, complexd *poly, complexd *l2, complexd *lo2, int radius, int nl0, bool SquaredField, bool alongCharges, int2 perpPoint){
@@ -153,11 +54,10 @@ __global__ void kernel_l2_multilevel_1(complexd *plaqfield, complexd *poly, comp
 			complexd pl0 = 1.;
 			complexd pl1 = 1.;
 			for(x[TDir()] = t; x[TDir()] < t+nl0; ++x[TDir()]){
-				pl0 *= (poly[(((x[3] * Grid(2) + x[2]) * Grid(1)) + x[1] ) * Grid(0) + x[0]]);
+				pl0 *= poly[indexId(x)];
 				int xold = x[dir];
 				x[dir] = (x[dir] + radius) % Grid(dir);
-				pl1 *= conj(poly[(((x[3] * Grid(2) + x[2]) * Grid(1)) + x[1] ) * Grid(0) + x[0]]);
-								
+				pl1 *= conj(poly[indexId(x)]);								
 				x[dir] = xold;
 			}			
 			complexd pl = pl0 * pl1;
@@ -167,9 +67,9 @@ __global__ void kernel_l2_multilevel_1(complexd *plaqfield, complexd *poly, comp
 				complexd plaq = 1.0;
 				x[TDir()] = t + tt;				
 				
-				int rad = radius/2;				
-				//int evenradius = (radius+1)%2;	
-				int evenradius = (radius+1) & 1;
+				int rad = (radius)/2;				
+				int evenradius = (radius+1)%2;	
+				//int evenradius = (radius+1) & 1;
 								
 				int dirz = dir;				//Z
 				int dirx = (dirz+1)%TDir();  //X
@@ -181,7 +81,9 @@ __global__ void kernel_l2_multilevel_1(complexd *plaqfield, complexd *poly, comp
 					int xoldx = x[dirx];
 					int xoldy = x[diry];
 					int xoldz = x[dirz];
-					x[dirz] = (x[dirz] + rad + iz - Grid(dirz)/2 + Grid(dirz)) % Grid(dirz);									
+					//x[dirz] = (x[dirz] + rad + iz - Grid(dirz)/2 + Grid(dirz)) % Grid(dirz);							
+					x[dirz] = (x[dirz] + rad) % Grid(dirz);				
+					x[dirz] = (x[dirz] + iz - Grid(dirz)/2 + Grid(dirz)) % Grid(dirz);												
 					x[dirx] = (x[dirx] + perpPoint.x + Grid(dirx)) % Grid(dirx);
 					x[diry] = (x[diry] + perpPoint.y + Grid(diry)) % Grid(diry);
 					pos = indexId(x); 	
@@ -598,123 +500,7 @@ public:
 
 
 
-
-__global__ void kernel_plaquette_comps(const double *lat, complexd* plaq_comps, complexd* mean_plaq){
-    size_t idx = threadIdx.x + blockDim.x * blockIdx.x;   
-	complexd plaq[6];
-	for(int d=0; d<6; d++) plaq[d] = 0.0;			
-	if( idx < Volume() ) {
-	   	size_t id = idx;
-		int parity = 0;
-		if( id >= HalfVolume() ){
-			parity = 1;	
-			id -= HalfVolume();
-		}
-		SixPlaquette(lat, plaq, id, parity);	
-		int x[4];
-		indexEO(id, parity, x);
-		int pos = indexId(x);
-		for(int d=0; d<6; d++) plaq_comps[pos + d * Volume()] = plaq[d];
-	}
-	for(int d=0; d<6; d++){
-		reduce_block_1d<complexd>(mean_plaq + d, plaq[d]);
-	  __syncthreads();
-	}
-}
-
-	
-class PlaqFields: Tunable{
-public:
-	Array<complexd>* fields;
-	Array<complexd>* Meanfields;
-	Array<complexd>* Meanfields_dev;
-private:
-	Array<double>* lat;
-	int size;
-	int sum;
-	double timesec;
-#ifdef TIMMINGS
-    Timer time;
-#endif
-
-   unsigned int sharedBytesPerThread() const { return sizeof(complexd); }
-   unsigned int sharedBytesPerBlock(const TuneParam &param) const { return 0; }
-   bool tuneSharedBytes() const { return false; } // Don't tune shared memory
-   bool tuneGridDim() const { return false; } // Don't tune the grid dimensions.
-   unsigned int minThreads() const { return size; }
-   void apply(const cudaStream_t &stream){
-	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-	kernel_plaquette_comps<<<tp.grid, tp.block, tp.shared_bytes, stream>>>(lat->getPtr(), fields->getPtr(), Meanfields_dev->getPtr());
-}
-public:
-   PlaqFields(Array<double>* lat) : lat(lat) {
-    size = Volume();
-   	fields = new Array<complexd>(Device, 6*size );
-   	Meanfields_dev = new Array<complexd>(Device, 6 );
-   	Meanfields_dev->Clear();
-   	Meanfields = new Array<complexd>(Host, 6 );
-	timesec = 0.0;  
-	sum = 0;
-}
-   ~PlaqFields(){ delete fields; delete Meanfields_dev; delete Meanfields; };
-   Array<complexd>* Run(const cudaStream_t &stream){
-#ifdef TIMMINGS
-    time.start();
-#endif
-	apply(stream);
-	sum++;
-    cudaDevSync();
-    cudaCheckError("Kernel execution failed");
-#ifdef TIMMINGS
-	cudaDevSync( );
-    time.stop();
-    timesec = time.getElapsedTimeInSec();
-#endif
-	return fields;
-}
-   Array<complexd>* Run(){ return Run(0); }
-   
-   Array<complexd>* getPlaqField(){ return fields; }
-   
-   Array<complexd>* GetMean(){
-		Meanfields->Copy(Meanfields_dev);
-		for(int i = 0; i < Meanfields->Size(); i++)
-			Meanfields->at(i) /= double(size*sum);	   	
-	   return Meanfields;
-   }
-   
-   double flops(){	return ((double)flop() * 1.0e-9) / timesec;}
-   double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
-   long long flop() const { return 0;}
-   long long bytes() const{ return 0;}
-   double get_time(){	return timesec;}
-   void stat(){	cout << "PlaqFields:  " <<  get_time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
-  TuneKey tuneKey() const {
-    std::stringstream vol, aux;
-    vol << PARAMS::Grid[0] << "x";
-    vol << PARAMS::Grid[1] << "x";
-    vol << PARAMS::Grid[2] << "x";
-    vol << PARAMS::Grid[3];
-    aux << "threads=" << size;
-    return TuneKey(vol.str().c_str(), typeid(*this).name(), aux.str().c_str());
-  }
-  std::string paramString(const TuneParam &param) const {
-    std::stringstream ps;
-    ps << "block=(" << param.block.x << "," << param.block.y << "," << param.block.z << ")";
-    ps << "shared=" << param.shared_bytes;
-    return ps.str();
-  }
-  void preTune() { Meanfields_dev->Backup(); }
-  void postTune() { Meanfields_dev->Restore(); }
-
-};
-
-
-
-
-
-
-Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int nl0, int nl1, int n4, int k4, int n2, int k2, int metrop, int ovrn, int radius, bool SquaredField, bool alongCharges, bool symmetrize, int2 perpPoint){
+ML_Fields* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int nl0, int nl1, int n4, int k4, int n2, int k2, int metrop, int ovrn, int radius, bool SquaredField, bool alongCharges, bool symmetrize, int2 perpPoint, bool ppmhit, bool plaqmhit){
 	Timer a0; a0.start();
 	cout << "==============================================" << endl;
 	cout << "Level 0:" << endl;
@@ -782,18 +568,29 @@ Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int nl0, 
 	// metropolis and overrelaxation algorithm
 	Metropolis_ML mtp(dev_lat, rng_state);
 	OverRelaxation_ML ovr(dev_lat);
-		
-	
-	const bool multihit = true;
-	Polyakov_Volume<multihit> mhitVol(dev_lat);
-	Array<complexd>* dev_mhit;
 	
 	double l2norm = 1./double(n2);
 	L2AvgL4ML l2avgl4(l2, lo2, l4, lo4, sl4, l2norm, nl0, nl1);
 	double l4norm = 1./double(n4);
 	L4AvgPP l4avgpp(l4, lo4, l4norm, nl0, nl1);
 	
-	PlaqFields plaqf(dev_lat);
+	
+	
+	
+	Polyakov_Volume0 mhitVol(dev_lat, ppmhit, plaqmhit);
+	Array<complexd>* latmhit = mhitVol.GetLatMHit();
+	Array<complexd>* dev_mhit = mhitVol.GetPolyVol();
+	
+	
+	PlaqFields<double> plaqf(dev_lat);
+	PlaqFields<complexd> plaqfmhit(latmhit);
+	
+	
+	
+	
+	
+	
+	
 	
 	l4->Clear();
 	lo4->Clear();
@@ -812,10 +609,12 @@ Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int nl0, 
 				mtp.Run(metrop, nl0);
 				ovr.Run(ovrn, nl0);	
 			}
-			//Extract plaquette components and mean plaquette components
-			Array<complexd>* plaqfield = plaqf.Run();
 			//Extract temporal links and apply MultiHit
-			dev_mhit = mhitVol.Run();			
+			mhitVol.Run();
+			//Extract plaquette components and mean plaquette components
+			Array<complexd>* plaqfield;
+			if(plaqmhit) plaqfield = plaqfmhit.Run();
+			else plaqfield = plaqf.Run();			
 			//Calculate tensor T2
 			L2ML l2ml(plaqfield, dev_mhit, l2, lo2, sl2, radius, nl0, SquaredField, alongCharges, perpPoint);
 			l2ml.Run();
@@ -878,9 +677,11 @@ Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int nl0, 
 		
 	cout << radius << '\t' << pp->at(0) << endl;
 	fileout << radius << '\t' << pp->at(0) << endl;	
-	Array<complexd>* splaq = plaqf.GetMean();
+	Array<complexd>* splaq;
+	if(plaqmhit) splaq = plaqfmhit.GetMean();
+	else splaq = plaqf.GetMean();
 	for(int fi = 0; fi < 6; ++fi){
-		cout << splaq->at(fi) << endl;
+		//cout << splaq->at(fi) << endl;
 		fileout << splaq->at(fi) << endl;
 	}	
 	fileout << Grid(0) << endl;
@@ -890,24 +691,38 @@ Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int nl0, 
 		fileout << iz - Grid(0)/2;
 		for(int fi = 0; fi < 6; ++fi) {
 			int id = iz + Grid(0) * fi;
-			if(SquaredField) cout << '\t' << ppo->at(id) << '\t' << ppo->at(id) / pp->at(0)-splaq->at(fi).real();
-			else cout << '\t' << ppo->at(id) << '\t' << ppo->at(id) / pp->at(0)-splaq->at(fi).imag();
+			//if(SquaredField) cout << '\t' << ppo->at(id) << '\t' << ppo->at(id) / pp->at(0)-splaq->at(fi).real();
+			//else cout << '\t' << ppo->at(id) << '\t' << ppo->at(id) / pp->at(0)-splaq->at(fi).imag();
 			fileout << '\t' << ppo->at(id);// << '\t' << ppo->at(id) / pp->at(0);
 		}
-		cout << endl;
+		//cout << endl;
 		fileout << endl;
 	}
 	fileout.close();
-	delete ppo;	
+	
+	
+	
+	for(int iz = 0; iz < Grid(0); ++iz){
+		//cout << iz - Grid(0)/2;
+		//fileout << iz - Grid(0)/2;
+		for(int fi = 0; fi < 6; ++fi) {
+			int id = iz + Grid(0) * fi;
+			if(SquaredField) ppo->at(id) = ppo->at(id) / pp->at(0)-splaq->at(fi).real();
+			else ppo->at(id) = ppo->at(id) / pp->at(0)-splaq->at(fi).imag();
+		}
+	}
+	ML_Fields *data = new ML_Fields;
+	data->Set(splaq, pp, ppo);
+
 	a0.stop();
 	std::cout << "time " << a0.getElapsedTime() << " s" << endl;
-	return pp;
+	return data;
 }
 
 }
 
-Array<complexd>* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int nl0, int nl1, int n4, int k4, int n2, int k2, int metrop, int ovrn, int radius, bool SquaredField, bool alongCharges, bool symmetrize, int2 perpPoint){
-	return ML_TTO_generic::MultiLevelTTO(lat, rng_state, nl0, nl1, n4, k4, n2, k2, metrop, ovrn, radius, SquaredField, alongCharges, symmetrize, perpPoint);
+ML_Fields* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, int nl0, int nl1, int n4, int k4, int n2, int k2, int metrop, int ovrn, int radius, bool SquaredField, bool alongCharges, bool symmetrize, int2 perpPoint, bool ppmhit, bool plaqmhit){
+	return ML_TTO_generic::MultiLevelTTO(lat, rng_state, nl0, nl1, n4, k4, n2, k2, metrop, ovrn, radius, SquaredField, alongCharges, symmetrize, perpPoint, ppmhit, plaqmhit);
 }
 
 }

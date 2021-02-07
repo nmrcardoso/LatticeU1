@@ -26,6 +26,7 @@
 #include "fields.h"
 #include "smearing.h"
 #include "wilsonloop.h"
+#include "gnuplot.h"
 
 
 using namespace std;
@@ -57,7 +58,7 @@ int main(){
 	//Setup global parameters in Host and Device
 	SetupLatticeParameters(Nx, Ny, Nz, Nt, dirs, beta, aniso, imetrop, ovrn);
 	
-	int maxIter = 1000;
+	int maxIter = 100000;
 	int printiter = 100;
 	bool hotstart = false;
 	
@@ -134,7 +135,9 @@ int main(){
       
     vector<double> plaq_corr;
 	int mininter = 700;
+	vector<ML_Fields*> dataTTO;
 	vector<Array<complexd>*> data;
+	GnuplotPipe gp;
 	for(PARAMS::iter = 1; PARAMS::iter <= maxIter; ++PARAMS::iter){
 		// metropolis and overrelaxation algorithm 
 		UpdateLattice(lattice, rng,  PARAMS::metrop, PARAMS::ovrn);
@@ -156,11 +159,11 @@ int main(){
 		}
 		
 		
-		if(1)if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
+		if(0)if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
 		
-			//Calc_PPFields(lattice, rng);
+			Calc_PPFields(lattice, rng, false);
 			//Calc_WLFields(lattice, rng);
-			break;
+			if(0){break;
 			Timer p0,p1;
 			cout << "########### P(0)*conj(P(r)) #####################" << endl;
 			p0.start();
@@ -182,6 +185,7 @@ int main(){
 			rng11 = new CudaRNG(seed, HalfVolume());
 			rresults = MultiLevel(lattice, rng11, 5, 10, 20, 5, 1, 3, Rmax, false);
 			delete rng11; delete rresults;
+			}
 		}
 		
 			
@@ -190,14 +194,14 @@ int main(){
 				cout << "########### P(0)*conj(P(r))O_munu Using MultiLevel #####################" << endl;
 				Timer p2;
 				p2.start();
-				int radius = 8;
+				int radius = 6;
 				CudaRNG *rng11 = new CudaRNG(seed, HalfVolume());
 				for(int radius = 2; radius <= 8; radius++){
 					bool SquaredField = true;
 					bool alongCharges = false; 
 					bool symmetrize = false;
 					int2 perpPoint = make_int2(0,0);
-					Array<complexd>* res0 = MultiLevelTTO(lattice, rng11, 5, 16, 5, 5, 2, 5, radius, SquaredField, alongCharges, symmetrize, perpPoint);
+					ML_Fields* res0 = MultiLevelTTO(lattice, rng11, 5, 16, 5, 5, 2, 5, radius, SquaredField, alongCharges, symmetrize, perpPoint);
 					delete res0;
 				}
 				delete rng11;
@@ -205,19 +209,67 @@ int main(){
 				std::cout << "p2: " << p2.getElapsedTime() << " s" << endl;
 				cout << "################################" << endl;	
 			}
-			if(0){
+			if(1){
 				Timer p2;p2.start();
-				int radius = 8;
-				CudaRNG *rng11 = new CudaRNG(seed, HalfVolume());
-				for(int radius = 2; radius <= 8; radius++){
+				int radius = 6;
+					cout << radius << ":::::::::::::::::" << (radius)%2 << ":::::::::::::::::" << (radius+1)%2 << endl;
+				//CudaRNG *rng11 = new CudaRNG(seed, HalfVolume());
+				//for(int radius = 2; radius <= 8; radius++){
 					bool SquaredField = true;
 					bool alongCharges = false; 
 					bool symmetrize = false;
 					int2 perpPoint = make_int2(0,0);
-					Array<complexd>* res0 = ML_TTO_generic::MultiLevelTTO(lattice, rng11, 2, 4, 5, 16, 5, 5, 2, 5, radius, SquaredField, alongCharges, symmetrize, perpPoint);
-					delete res0;
-				}
-				delete rng11;
+					//Array<complexd>* res0 = ML_TTO_generic::MultiLevelTTO(lattice, rng, 2, 4, 5, 10, 20, 5, 2, 5, radius, SquaredField, alongCharges, symmetrize, perpPoint);
+					//Array<complexd>* res0 = MultiLevelTTO(lattice, rng, 5, 10, 20, 5, 2, 5, radius, SquaredField, alongCharges, symmetrize, perpPoint);
+					ML_Fields* res0 = MultiLevelTTO(lattice, rng, 10, 10, 50, 5, 2, 5, radius, SquaredField, alongCharges, symmetrize, perpPoint, true, true);
+					dataTTO.push_back(res0);
+
+					
+					gp.sendLine("reset;");
+					gp.sendLine("set terminal x11 size 1200,600 enhanced font 'Verdana,12' persist");
+
+					gp.sendLine("$data << EOD");
+					
+					
+					for(int i = 0; i < Grid(0);++i){
+						int ir = i - Grid(0)/2;
+						string df = ToString(ir);
+						for(int f=0; f<6; f++) {
+							int id = i + Grid(0) * f;
+							complexd tmp = 0.0;
+							for(int j = 0; j < dataTTO.size();++j){
+								tmp += dataTTO[j]->ppo->at(id);
+							}
+							tmp /= double(dataTTO.size());
+							df += "\t" + ToString(tmp.real());
+						
+						}
+						gp.sendLine(df);
+					}
+					gp.sendLine("EOD");
+					gp.sendLine("set multiplot layout 1,2 rowsfirst");
+					gp.sendLine("unset label");
+					gp.sendLine("set grid");
+					gp.sendLine("set mxtics 5");
+					gp.sendLine("set mytics 5");
+					gp.sendLine("set style line 1 linecolor rgb 'red' pointtype 5 pointsize 1");
+					gp.sendLine("set style line 2 linecolor rgb '#0010ad' pointtype 5 pointsize 1");
+					gp.sendLine("set style line 3 linecolor rgb 'green' pointtype 5 pointsize 1");
+					gp.sendLine("set xlabel \"z\"");
+					//gp.sendLine("set ylabel \"Ei (GeV)\"");
+					gp.sendLine("set key left bottom");
+					//gp.sendLine("plot \"$data\" using 1:2 ls 1  title \"real\", \"$data\" using 1:3 ls 2  title \"imag\"");
+					//gp.sendLine("plot \"$data\" using 1:2 ls 1  title \"real\"");
+					gp.sendLine("plot \"$data\" using 1:2 ls 1  title \"Ex\", \"$data\" using 1:3 ls 2  title \"Ey\", \"$data\" using 1:4 ls 3  title \"Ez\"");
+					gp.sendLine("plot \"$data\" using 1:5 ls 1  title \"Bx\", \"$data\" using 1:6 ls 2  title \"By\", \"$data\" using 1:7 ls 3  title \"Bz\"");
+					gp.sendLine("unset multiplot");
+					gp.sendEndOfData();
+
+				
+					
+					//delete res0;
+				//}
+				//delete rng11;
 				p2.stop();
 				std::cout << "p2: " << p2.getElapsedTime() << " s" << endl;
 				cout << "################################" << endl;	
@@ -407,7 +459,7 @@ int main(){
 					bool alongCharges = false; 
 					bool symmetrize = false;
 					int2 perpPoint = make_int2(0,0);
-					Array<complexd>* res0 = MultiLevelTTO(lattice, rng, 10, 16, 50, 5, 2, 5, radius, SquaredField, alongCharges, symmetrize, perpPoint);
+					ML_Fields* res0 = MultiLevelTTO(lattice, rng, 10, 16, 50, 5, 2, 5, radius, SquaredField, alongCharges, symmetrize, perpPoint);
 					delete res0;
 				}
 				p2.stop();
@@ -449,11 +501,9 @@ int main(){
 		delete val;
 	}
 	
-	/*delete lattice;
+	delete lattice;
 	delete rng;
-	delete[] plaqv;*/
-	assertAllMemFree();
-	FreeAllMemory();
+	delete[] plaqv;
 	t0.stop();
 	std::cout << "Time: " << t0.getElapsedTime() << " s" << endl;
 	

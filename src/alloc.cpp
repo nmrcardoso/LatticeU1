@@ -636,7 +636,6 @@ static void FreeMemoryType(AllocType type){
 }
 
 
-
 void FreeAllMemory(){
     if (!alloc[DEVICE_PTR].empty() ) {
       printfU1("Releasing DEVICE internal memory allocations not freed by user:\n");

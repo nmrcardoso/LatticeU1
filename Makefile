@@ -9,7 +9,7 @@ INC_LIBS =
 
 
 
-GCC ?= g++ -g
+GCC ?= g++
 # -std=c++11
 
 
@@ -21,7 +21,7 @@ CUDA_LIB_PATH  ?= $(CUDA_PATH)/lib64
 GENCODE_FLAGS = -arch=$(GPU_ARCH)
 LDFLAGS   := -L$(CUDA_LIB_PATH) -lcudart  -lcuda -lcurand
 CCFLAGS   :=  -O3 -I$(CUDA_INC_PATH)/
-NVCC      ?= $(CUDA_BIN_PATH)/nvcc -g 
+NVCC      ?= $(CUDA_BIN_PATH)/nvcc
 
 
 COMP_CAP = $(GPU_ARCH:sm_%=%0)

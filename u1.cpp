@@ -180,57 +180,58 @@ int main(){
 			cout << "########### P(0)*conj(P(r)) Using MultiLevel #####################" << endl;		
 			int Rmax = Grid(0)/2+1;
 			CudaRNG *rng11 = new CudaRNG(seed, HalfVolume());
-			Array<complexd>* rresults = MLgeneric::MultiLevel(lattice, rng11, 2, 4, 5, 10, 20, 5, 1, 3, Rmax, false);
-			delete rng11; delete rresults;
-			rng11 = new CudaRNG(seed, HalfVolume());
-			rresults = MultiLevel(lattice, rng11, 5, 10, 20, 5, 1, 3, Rmax, false);
+			
+			MLArg arg;
+			arg.Rmax() = Rmax;
+			arg.MHit() = true;
+								
+			arg.nLinksLvl0() = 2;
+			arg.StepsLvl0() = 50;
+			arg.UpdatesLvl0() = 5;
+			arg.nLinksLvl1() = 4;
+			arg.StepsLvl1() = 10;
+			arg.UpdatesLvl1() = 16;
+			arg.nUpdatesMetropolis() = 1;
+			arg.nUpdatesOvr() = 3;
+			
+			Array<complexd>* rresults = MultiLevel(lattice, rng, &arg);
+			
+			
 			delete rng11; delete rresults;
 			}
 		}
 		
 			
 		if(1)if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
-			if(0){
-				cout << "########### P(0)*conj(P(r))O_munu Using MultiLevel #####################" << endl;
-				Timer p2;
-				p2.start();
-				int radius = 6;
-				CudaRNG *rng11 = new CudaRNG(seed, HalfVolume());
-				for(int radius = 2; radius <= 8; radius++){
-					bool SquaredField = true;
-					bool alongCharges = false; 
-					bool symmetrize = false;
-					int2 perpPoint = make_int2(0,0);
-					ML_Fields* res0 = MultiLevelTTO(lattice, rng11, 5, 16, 5, 5, 2, 5, radius, SquaredField, alongCharges, symmetrize, perpPoint);
-					delete res0;
-				}
-				delete rng11;
-				p2.stop();
-				std::cout << "p2: " << p2.getElapsedTime() << " s" << endl;
-				cout << "################################" << endl;	
-			}
 			if(1){
 				Timer p2;p2.start();
 				int radius = 6;
 					cout << radius << ":::::::::::::::::" << (radius)%2 << ":::::::::::::::::" << (radius+1)%2 << endl;
 				//CudaRNG *rng11 = new CudaRNG(seed, HalfVolume());
 				//for(int radius = 2; radius <= 8; radius++){
-					bool SquaredField = true;
-					bool alongCharges = false; 
-					bool symmetrize = false;
-					int2 perpPoint = make_int2(0,0);
-					//Array<complexd>* res0 = ML_TTO_generic::MultiLevelTTO(lattice, rng, 2, 4, 5, 10, 20, 5, 2, 5, radius, SquaredField, alongCharges, symmetrize, perpPoint);
-					//Array<complexd>* res0 = MultiLevelTTO(lattice, rng, 5, 10, 20, 5, 2, 5, radius, SquaredField, alongCharges, symmetrize, perpPoint);
-					ML_Fields* res0 = MultiLevelTTO(lattice, rng, 10, 10, 50, 5, 2, 5, radius, SquaredField, alongCharges, symmetrize, perpPoint, true, true);
-					dataTTO.push_back(res0);
-
+					MLTTOArg arg;
+					arg.Radius() = radius;
+					arg.PerpPoint() = make_int2(0, 0);
+					arg.SquaredField() = true;
+					arg.AlongCharges() = false; 
+					arg.Sym() = false;
+					arg.PPMHit() = true;
+					arg.PlaqMHit() = false;
+										
+					arg.nLinksLvl0() = 2;
+					arg.StepsLvl0() = 50;
+					arg.UpdatesLvl0() = 5;
+					arg.nLinksLvl1() = 4;
+					arg.StepsLvl1() = 10;
+					arg.UpdatesLvl1() = 16;
+					arg.nUpdatesMetropolis() = 1;
+					arg.nUpdatesOvr() = 3;
 					
+					ML_Fields* res0 = MultiLevelTTO(lattice, rng, &arg);
+					dataTTO.push_back(res0);					
 					gp.sendLine("reset;");
 					gp.sendLine("set terminal x11 size 1200,600 enhanced font 'Verdana,12' persist");
-
-					gp.sendLine("$data << EOD");
-					
-					
+					gp.sendLine("$data << EOD");			
 					for(int i = 0; i < Grid(0);++i){
 						int ir = i - Grid(0)/2;
 						string df = ToString(ir);
@@ -241,8 +242,7 @@ int main(){
 								tmp += dataTTO[j]->ppo->at(id);
 							}
 							tmp /= double(dataTTO.size());
-							df += "\t" + ToString(tmp.real());
-						
+							df += "\t" + ToString(tmp.real());						
 						}
 						gp.sendLine(df);
 					}
@@ -278,19 +278,25 @@ int main(){
 		
 			if(0){
 				cout << "########### P(0)*conj(P(r)) Using MultiLevel #####################" << endl;
-				int Rmax = Grid(0)/2;
+				int Rmax = Grid(0)/2+1;
 				CudaRNG *rng11 = new CudaRNG(seed, HalfVolume());
 				Array<complexd>* results;
 				Array<complexd> *pp;
 				Array<complexd>*ppfield;
-				//results = MultiLevel(lattice, rng, 1000, 20, 200, 5, 1, 3, Rmax, false);
-				results = MultiLevel(lattice, rng11, 2, 20, 20, 5, 1, 3, Rmax, false);
-				//MultiLevelField(lattice, rng11, &pp, &ppfield, 2, 20, 20, 5, 1, 3, Rmax, false);
-				delete rng11;
 				
-				cout << "################################" << endl;	
-				rng11 = new CudaRNG(seed, HalfVolume());
-				Array<complexd>* rresults = MLgeneric::MultiLevel(lattice, rng11, 2, 4, 2, 20, 20, 5, 1, 3, Rmax, false);
+				
+				MLArg arg;
+				arg.Rmax() = Rmax;
+				arg.nLinksLvl0() = 2;
+				arg.StepsLvl0() = 50;
+				arg.UpdatesLvl0() = 5;
+				arg.nLinksLvl1() = 4;
+				arg.StepsLvl1() = 10;
+				arg.UpdatesLvl1() = 16;
+				arg.nUpdatesMetropolis() = 1;
+				arg.nUpdatesOvr() = 3;
+				arg.MHit() = true;
+				results = MultiLevel(lattice, rng11, &arg);
 				delete rng11;
 				break;
 				data.push_back(results);
@@ -435,38 +441,6 @@ int main(){
 			*/
 			
 			
-						
-			if(0){
-				cout << "########### P(0)*conj(P(r)) Using MultiLevel #####################" << endl;
-				p2.start();
-				int Rmax = Grid(0)/2;
-				Array<complexd>* results = MultiLevel(lattice, rng, 1000, 20, 200, 5, 1, 3, Rmax, true);
-				delete results;
-				p2.stop();
-				std::cout << "p2: " << p2.getElapsedTime() << " s" << endl;
-				cout << "################################" << endl;	
-			}
-			
-			
-			
-			
-			if(0){
-				cout << "########### P(0)*conj(P(r))O_munu Using MultiLevel #####################" << endl;
-				p2.start();
-				int radius = 8;
-				for(int radius = 2; radius <= 8; radius++){
-					bool SquaredField = true;
-					bool alongCharges = false; 
-					bool symmetrize = false;
-					int2 perpPoint = make_int2(0,0);
-					ML_Fields* res0 = MultiLevelTTO(lattice, rng, 10, 16, 50, 5, 2, 5, radius, SquaredField, alongCharges, symmetrize, perpPoint);
-					delete res0;
-				}
-				p2.stop();
-				std::cout << "p2: " << p2.getElapsedTime() << " s" << endl;
-				cout << "################################" << endl;	
-			}
-			//break;
 		}
 
 

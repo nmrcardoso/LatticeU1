@@ -1,13 +1,11 @@
 
-
-template<int multilevel>
-__global__ void kernel_metropolis_multilevel(double *lat, int parity, int mu, cuRNGState *rng_state){
+__global__ void kernel_metropolis_multilevel(double *lat, int parity, int mu, cuRNGState *rng_state, int nl){
     size_t id = threadIdx.x + blockDim.x * blockIdx.x;
     if( id >= HalfVolume() ) return ;
     
 	int x[4];
 	indexEO(id, parity, x);
-	if((x[TDir()]%multilevel) || mu==3){	
+	if((x[TDir()]%nl) || mu==3){	
 		cuRNGState localState = rng_state[ id ];
 		double new_phase = Random<double>(localState) * 2. * M_PI;
 		double b = Random<double>(localState);
@@ -21,11 +19,11 @@ __global__ void kernel_metropolis_multilevel(double *lat, int parity, int mu, cu
 
 
 
-template<int multilevel>
 class Metropolis_ML: Tunable{
 private:
 	Array<double>* lat;
 	CudaRNG *rng_state;
+	int nl;
 	int metrop;
 	int parity;
 	int mu;
@@ -42,10 +40,10 @@ private:
    unsigned int minThreads() const { return size; }
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-	kernel_metropolis_multilevel<multilevel><<<tp.grid, tp.block, 0, stream>>>(lat->getPtr(), parity, mu, rng_state->getPtr());
+	kernel_metropolis_multilevel<<<tp.grid, tp.block, 0, stream>>>(lat->getPtr(), parity, mu, rng_state->getPtr(), nl);
 }
 public:
-   Metropolis_ML(Array<double>* lat, CudaRNG *rng_state, int metrop) : lat(lat), rng_state(rng_state), metrop(metrop){
+   Metropolis_ML(Array<double>* lat, CudaRNG *rng_state) : lat(lat), rng_state(rng_state){
 	size = HalfVolume();
 	timesec = 0.0;  
 }
@@ -66,7 +64,11 @@ public:
     timesec = time.getElapsedTimeInSec();
 #endif
 }
-   void Run(){	return Run(0);}
+   void Run(int metrop_, int nl_){ 
+   	metrop = metrop_; 
+   	nl = nl_;	
+   	Run(0);
+   }
    double flops(){	return ((double)flop() * 1.0e-9) / timesec;}
    double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
    long long flop() const { return 0;}
@@ -100,23 +102,22 @@ public:
 };
 
 
-template<int multilevel>
-__global__ void kernel_overrelaxation_multilevel(double *lat, int parity, int mu){
+__global__ void kernel_overrelaxation_multilevel(double *lat, int parity, int mu, int nl){
     size_t id = threadIdx.x + blockDim.x * blockIdx.x;
     if( id >= HalfVolume() ) return ;
     
 	int x[4];
 	indexEO(id, parity, x);
-	if((x[TDir()]%multilevel) || mu==3){		
+	if((x[TDir()]%nl) || mu==3){		
 		lat[id + parity * HalfVolume() + mu * Volume()] = OvrFunc(lat, id, parity, mu);
 	}
 }
 
 
-template<int multilevel>
 class OverRelaxation_ML: Tunable{
 private:
 	Array<double>* lat;
+	int nl;
 	int ovrn;
 	int parity;
 	int mu;
@@ -133,10 +134,10 @@ private:
    unsigned int minThreads() const { return size; }
    void apply(const cudaStream_t &stream){
 	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
-	kernel_overrelaxation_multilevel<multilevel><<<tp.grid, tp.block, 0, stream>>>(lat->getPtr(), parity, mu);
+	kernel_overrelaxation_multilevel<<<tp.grid, tp.block, 0, stream>>>(lat->getPtr(), parity, mu, nl);
 }
 public:
-   OverRelaxation_ML(Array<double>* lat, int ovrn) : lat(lat), ovrn(ovrn){
+   OverRelaxation_ML(Array<double>* lat) : lat(lat) {
 	size = HalfVolume();
 	timesec = 0.0;  
 }
@@ -159,7 +160,11 @@ public:
     timesec = time.getElapsedTimeInSec();
 #endif
 }
-   void Run(){	return Run(0);}
+   void Run(int ovrn_, int nl_){ 
+   	ovrn = ovrn_; 
+   	nl = nl_;	
+   	Run(0);
+   }
    double flops(){	return ((double)flop() * 1.0e-9) / timesec;}
    double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
    long long flop() const { return 0;}
@@ -294,5 +299,3 @@ public:
   void postTune() { }
 
 };
-
-

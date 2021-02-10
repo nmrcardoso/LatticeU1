@@ -95,8 +95,20 @@ void Calc_PPFields(Array<double>* lattice, CudaRNG *rng, bool chargeplane, bool 
 	
 	if(multilevel) {
 		//DON'T FORGET TO TUNE THE MULTIVEL!!!!!!!!!!!!!		
-		//MultiLevelField(lattice, rng, &pp, &ppfield, 1, 0, 1, 0, 1, 3, Rmax);
-		MultiLevelField(lattice, rng, &pp, &ppfield, 10, 16, 50, 5, 2, 5, Rmax);
+		MLArg arg;
+		arg.Rmax() = Rmax;
+		arg.nLinksLvl0() = 2;
+		arg.StepsLvl0() = 50;
+		arg.UpdatesLvl0() = 5;
+		arg.nLinksLvl1() = 4;
+		arg.StepsLvl1() = 10;
+		arg.UpdatesLvl1() = 16;
+		arg.nUpdatesMetropolis() = 1;
+		arg.nUpdatesOvr() = 3;
+		arg.MHit() = true;
+		auto data = MultiLevelField(lattice, rng, &arg);
+		pp = std::get<0>(data);
+		ppfield = std::get<1>(data);
 	}
 	else{
 		bool multihit = true;

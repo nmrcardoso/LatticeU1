@@ -5,6 +5,7 @@ Code includes:
 - Multilevel for PP*
   - added generic with the number of time slices at level 0 and 1 choosen by the user
 - Multilevel for PP*O (charges placed along z direction)
+  - 1D, but 2D and 3D can be obtained by running the code several times passed the perpendiular points
   - to calculate (Ex², Ey², Ez², Bx², By², Bz²)
   - to calculate (Ex, Ey, Ez, Bx, By, Bz)  <-- Needs to be reviewed
   - added generic with the number of time slices at level 0 and 1 choosen by the user

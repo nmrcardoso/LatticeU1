@@ -13,11 +13,11 @@ complexd Polyakov(Array<double> *dev_lat, bool print=false);
 
 
 template<class Real>
-Array<complexd>* Poly2(Array<Real> *dev_lat, bool multihit);
+Array<complexd>* Poly2(Array<Real> *dev_lat, uint Rmax, bool multihit);
 
 
 template<class Real>
-void Poly2(Array<Real> *lat, Array<complexd> **pp, Array<complexd> **ppspace, bool multihit);
+void Poly2(Array<Real> *lat, Array<complexd> **pp, Array<complexd> **ppspace, uint Rmax, bool multihit);
 
 }
 

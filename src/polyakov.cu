@@ -381,8 +381,7 @@ public:
 
 
 template<class Real>
-Array<complexd>* Poly2(Array<Real> *lat, bool multihit){
-	int Rmax = Grid(0)/2+1;
+Array<complexd>* Poly2(Array<Real> *lat, uint Rmax, bool multihit){
 	
 	Array<complexd>* poly = 0;
 	if(multihit){
@@ -417,15 +416,14 @@ Array<complexd>* Poly2(Array<Real> *lat, bool multihit){
 	fileout.close();	
 	return poly2;
 }
-template Array<complexd>* Poly2<double>(Array<double> *lat, bool multihit);
-template Array<complexd>* Poly2<complexd>(Array<complexd> *lat, bool multihit);
+template Array<complexd>* Poly2<double>(Array<double> *lat, uint Rmax, bool multihit);
+template Array<complexd>* Poly2<complexd>(Array<complexd> *lat, uint Rmax, bool multihit);
 
 
 
 
 template<class Real>
-void Poly2(Array<Real> *lat, Array<complexd> **poly2, Array<complexd> **ppspace, bool multihit){
-	int Rmax = Grid(0)/2;
+void Poly2(Array<Real> *lat, Array<complexd> **poly2, Array<complexd> **ppspace, uint Rmax, bool multihit){
 	
 	Array<complexd>* poly = 0;
 	if(multihit){
@@ -460,8 +458,8 @@ void Poly2(Array<Real> *lat, Array<complexd> **poly2, Array<complexd> **ppspace,
 	
 	fileout.close();	
 }
-template void Poly2<double>(Array<double> *lat, Array<complexd> **poly2, Array<complexd> **ppspace, bool multihit);
-template void Poly2<complexd>(Array<complexd> *lat, Array<complexd> **poly2, Array<complexd> **ppspace, bool multihit);
+template void Poly2<double>(Array<double> *lat, Array<complexd> **poly2, Array<complexd> **ppspace, uint Rmax, bool multihit);
+template void Poly2<complexd>(Array<complexd> *lat, Array<complexd> **poly2, Array<complexd> **ppspace, uint Rmax, bool multihit);
 
 
 

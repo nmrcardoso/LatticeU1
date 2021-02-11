@@ -54,7 +54,7 @@ struct ChromoFieldArg{
 
 __global__ void kernel_ChromoField(ChromoFieldArg arg){
 
-	size_t id = threadIdx.x + blockDim.x * blockIdx.x;
+	int id = threadIdx.x + blockDim.x * blockIdx.x;
 		
 	int fieldoffset = arg.nx * arg.ny; 
 		  
@@ -72,7 +72,7 @@ for(int t = 0; t < arg.Tmax; t++){
     
     int x[4];
     indexNO(id, x);
-    x[dirz] = (x[dirz] + (radius+1) / 2) % Grid(dirz);
+    x[dirz] = (x[dirz] + (radius) / 2) % Grid(dirz);
     
 	int EvenRadius = (radius+1)%2;
     for( int ix = 0; ix < arg.nx; ++ix )
@@ -250,7 +250,7 @@ for(int t = 0; t < arg.Tmax; t++){
 
 __global__ void kernel_ChromoFieldMidFluxTube(ChromoFieldArg arg){
 
-	size_t id = threadIdx.x + blockDim.x * blockIdx.x;
+	int id = threadIdx.x + blockDim.x * blockIdx.x;
 		
 	int fieldoffset = arg.nx * arg.ny; 
 		  
@@ -268,7 +268,7 @@ for(int t = 0; t < arg.Tmax; t++){
     
     int x[4];
     indexNO(id, x);
-    x[dirz] = (x[dirz] + (radius+1) / 2) % Grid(dirz);
+    x[dirz] = (x[dirz] + (radius) / 2) % Grid(dirz);
     
 	int EvenRadius = (radius+1)%2;
     for( int ix = 0; ix < arg.nx; ++ix )

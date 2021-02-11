@@ -26,6 +26,7 @@
 #include "fields.h"
 #include "smearing.h"
 #include "wilsonloop.h"
+#include "link_test.h"
 #include "gnuplot.h"
 
 
@@ -58,7 +59,7 @@ int main(){
 	//Setup global parameters in Host and Device
 	SetupLatticeParameters(Nx, Ny, Nz, Nt, dirs, beta, aniso, imetrop, ovrn);
 	
-	int maxIter = 100000;
+	int maxIter = 5000;
 	int printiter = 100;
 	bool hotstart = false;
 	
@@ -142,8 +143,13 @@ int main(){
 		// metropolis and overrelaxation algorithm 
 		UpdateLattice(lattice, rng,  PARAMS::metrop, PARAMS::ovrn);
 		//UpdateLattice(lattice, rngv, PARAMS::metrop, PARAMS::ovrn);
-		
+				
 		if((PARAMS::iter%printiter)==0){
+			complexd linktest = TestLink(lattice);
+			if( abs(1.0-linktest.abs2()) > 1.e-10){
+				cout << "Error: U*conj(U) = " << linktest.abs2() << " test failed...." << endl;
+				break;
+			}
 			Plaquette(lattice, plaqv);
 			cout << PARAMS::iter << '\t' << plaqv[0] << '\t' << plaqv[1] << endl;
 			fileout << PARAMS::iter << '\t' << plaqv[0] << '\t' << plaqv[1] << endl;
@@ -159,21 +165,21 @@ int main(){
 		}
 		
 		
-		if(0)if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
+		if(1)if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
 		
-			Calc_PPFields(lattice, rng, false);
+			Calc_PPFields(lattice, rng, true, true);
 			//Calc_WLFields(lattice, rng);
 			if(0){break;
 			Timer p0,p1;
 			cout << "########### P(0)*conj(P(r)) #####################" << endl;
 			p0.start();
-			Array<complexd>* res = Poly2(lattice, false);
+			Array<complexd>* res = Poly2(lattice, Grid(0)/2+1, false);
 			delete res;
 			p0.stop();
 			std::cout << "p0: " << p0.getElapsedTime() << " s" << endl;	
 			cout << "########### P(0)*conj(P(r)) Using MultiHit #####################" << endl;
 			p1.start();
-			res = Poly2(lattice, true);
+			res = Poly2(lattice, Grid(0)/2+1, true);
 			delete res;
 			p1.stop();
 			std::cout << "p1: " << p1.getElapsedTime() << " s" << endl;
@@ -202,30 +208,29 @@ int main(){
 		}
 		
 			
-		if(1)if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
+		if(0)if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
 			if(1){
 				Timer p2;p2.start();
+				MLTTOArg arg;
+				arg.PerpPoint() = make_int2(0, 0);
+				arg.SquaredField() = true;
+				arg.AlongCharges() = false; 
+				arg.Sym() = false;
+				arg.PPMHit() = true;
+				arg.PlaqMHit() = false;
+									
+				arg.nLinksLvl0() = 2;
+				arg.StepsLvl0() = 50;
+				arg.UpdatesLvl0() = 5;
+				arg.nLinksLvl1() = 4;
+				arg.StepsLvl1() = 10;
+				arg.UpdatesLvl1() = 16;
+				arg.nUpdatesMetropolis() = 1;
+				arg.nUpdatesOvr() = 3;
 				int radius = 6;
-					cout << radius << ":::::::::::::::::" << (radius)%2 << ":::::::::::::::::" << (radius+1)%2 << endl;
 				//CudaRNG *rng11 = new CudaRNG(seed, HalfVolume());
 				//for(int radius = 2; radius <= 8; radius++){
-					MLTTOArg arg;
 					arg.Radius() = radius;
-					arg.PerpPoint() = make_int2(0, 0);
-					arg.SquaredField() = true;
-					arg.AlongCharges() = false; 
-					arg.Sym() = false;
-					arg.PPMHit() = true;
-					arg.PlaqMHit() = false;
-										
-					arg.nLinksLvl0() = 2;
-					arg.StepsLvl0() = 50;
-					arg.UpdatesLvl0() = 5;
-					arg.nLinksLvl1() = 4;
-					arg.StepsLvl1() = 10;
-					arg.UpdatesLvl1() = 16;
-					arg.nUpdatesMetropolis() = 1;
-					arg.nUpdatesOvr() = 3;
 					
 					ML_Fields* res0 = MultiLevelTTO(lattice, rng, &arg);
 					dataTTO.push_back(res0);					
@@ -395,20 +400,20 @@ int main(){
 			std::cout << "p0: " << p0.getElapsedTime() << " s" << endl;	
 			cout << "########### P(0)*conj(P(r)) #####################" << endl;
 			p0.start();
-			Array<complexd>* res = Poly2(lattice, false);
+			Array<complexd>* res = Poly2(lattice, Grid(0)/2+1, false);
 			delete res;
 			p0.stop();
 			std::cout << "p0: " << p0.getElapsedTime() << " s" << endl;	
 			cout << "########### P(0)*conj(P(r)) Using MultiHit #####################" << endl;
 			p1.start();
-			res = Poly2(lattice, true);
+			res = Poly2(lattice, Grid(0)/2+1, true);
 			delete res;
 			p1.stop();
 			std::cout << "p1: " << p1.getElapsedTime() << " s" << endl;	
 			cout << "########### P(0)*conj(P(r)) Using MultiHit a #####################" << endl;
 			p1.start();			
 			Array<complexd>* out = ApplyMultiHit(lattice, 1);
-			res = Poly2(out, false);
+			res = Poly2(out, Grid(0)/2+1, false);
 			delete out;
 			delete res;
 			p1.stop();
@@ -416,7 +421,7 @@ int main(){
 			cout << "########### P(0)*conj(P(r)) Using APE time #####################" << endl;
 			p1.start();
 			Array<double>* out1 = ApplyAPE(lattice, .9, 1, 1);
-			res = Poly2(out1, false);
+			res = Poly2(out1, Grid(0)/2+1, false);
 			delete out1;
 			delete res;
 			p1.stop();

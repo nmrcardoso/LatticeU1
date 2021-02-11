@@ -500,6 +500,7 @@ ML_Fields* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, MLTTOArg *arg){
 	Timer a0; a0.start();
 	
 	arg->check();	
+	arg->print();
 	
 	Array<double>* dev_lat = new Array<double>(Device);
 	dev_lat->Copy(lat);
@@ -527,7 +528,6 @@ ML_Fields* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, MLTTOArg *arg){
 	
 	
 	
-	
 	Polyakov_Volume0 mhitVol(dev_lat, arg->PPMHit(), arg->PlaqMHit());
 	Array<complexd>* latmhit = mhitVol.GetLatMHit();
 	Array<complexd>* dev_mhit = mhitVol.GetPolyVol();
@@ -535,11 +535,6 @@ ML_Fields* MultiLevelTTO(Array<double> *lat, CudaRNG *rng_state, MLTTOArg *arg){
 	
 	PlaqFields<double> plaqf(dev_lat);
 	PlaqFields<complexd> plaqfmhit(latmhit);
-	
-	
-	
-	
-	
 	
 	
 	

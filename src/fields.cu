@@ -25,6 +25,10 @@
 #include "wilsonloop.h"
 
 
+
+#include "gnuplot.h"
+
+
 using namespace std;
 
 
@@ -35,7 +39,11 @@ namespace U1{
 
 
 
-
+Array<complexd> *mean_ppfield;
+complexd mean_pp = 0;
+complexd mean_plaq[6];
+int nconfigsPP = 1;
+GnuplotPipe gpp;
 
 Array<complexd>* GetPPFields(Array<complexd> *pp, Array<complexd> *ppfield, Array<complexd> *plaqf, Array<complexd> *plaqfield, int Rmax, bool chargeplane){
 	int nx = Grid(0);
@@ -59,7 +67,7 @@ Array<complexd>* GetPPFields(Array<complexd> *pp, Array<complexd> *ppfield, Arra
 		cout << "Saving data to " << fname << endl;
 		fieldsout << std::scientific;
 		fieldsout.precision(14);
-		fieldsout << nx << '\t' << ny << '\t' << r+1 << endl;
+		fieldsout << nx << '\t' << ny << '\t' << r << endl;
 		fieldsout << pp->at(r) << endl;
 		for(int f = 0; f < 6; f++)
 			fieldsout << plaqf->at(f) << endl;
@@ -77,6 +85,60 @@ Array<complexd>* GetPPFields(Array<complexd> *pp, Array<complexd> *ppfield, Arra
 		}
 		fieldsout.close();
 	}
+	
+	
+						
+	gpp.sendLine("reset;");
+	gpp.sendLine("set terminal x11 size 1200,600 enhanced font 'Verdana,12' persist");
+	gpp.sendLine("$data << EOD");	
+	
+	int rr = 6;
+	mean_pp += pp->at(rr);
+	if(nconfigsPP==1){
+		for(int f=0; f<6; f++) mean_plaq[f] = 0.0;
+		mean_ppfield = new Array<complexd>(Host, fsize);
+	}
+	for(int f=0; f<6; f++) mean_plaq[f] += plaqf->at(f);
+	for( int ix = 0; ix < nx; ++ix ) 
+	for( int iy = 0; iy < ny; ++iy ) {
+		int id0 = ix + nx * iy;
+		for(int f=0; f<6; f++) {
+			int id1 = id0 + f * plane + fsize * rr;
+			mean_ppfield->at(id0 + f * plane) += field->at(id1);
+		}	
+	}
+	
+	
+	
+	complexd ppi = mean_pp/double(nconfigsPP);
+	for( int ix = 0; ix < nx; ++ix ) {
+		for( int iy = 0; iy < ny; ++iy ) {
+			string df = ToString(ix-Grid(0)/2) + '\t' + ToString(iy-Grid(0)/2);
+			int id0 = ix + nx * iy;
+			for(int f=0; f<1; f++) {
+				int id1 = id0 + f * plane;		
+				complexd ppf = mean_ppfield->at(id1)/double(nconfigsPP);	
+				complexd ppf0 = mean_ppfield->at(f*plane)/double(nconfigsPP);				
+				df += '\t' + ToString(-(ppf.imag()- ppf0.imag())/ppi.real());
+			}
+			gpp.sendLine(df);
+		}
+		gpp.sendLine(" ");
+	}
+	
+	nconfigsPP++;
+	gpp.sendLine("EOD");
+	//gpp.sendLine("set pm3d map");
+	gpp.sendLine("set samples 51, 51");
+	gpp.sendLine("set isosamples 20, 20");
+	gpp.sendLine("set style data lines");
+	//gpp.sendLine("set pm3d");
+	gpp.sendLine("splot \"$data\"  u 1:2:3");
+	gpp.sendEndOfData();
+	
+	
+	
+	
 	return field;
 }
 
@@ -112,7 +174,7 @@ void Calc_PPFields(Array<double>* lattice, CudaRNG *rng, bool chargeplane, bool 
 	}
 	else{
 		bool multihit = true;
-		Poly2(lattice, &pp, &ppfield, true);
+		Poly2(lattice, &pp, &ppfield, Rmax, true);
 	}
 	Array<complexd> *field0 = GetPPFields(pp, ppfield, plaqf, plaqfield, Rmax, chargeplane);
 	delete field0;

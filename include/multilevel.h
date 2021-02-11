@@ -293,6 +293,10 @@ class MLTTOArg{
 };
 
 
+template<bool multihit>
+std::vector<double> MultiLevel(Array<double> *lat, CudaRNG *rng_state, MLArg *arg, bool PrintResultsAtEveryN4);
+
+
 Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, MLArg *arg, bool PrintResultsAtEveryN4=false);
 
 std::tuple<Array<complexd>*, Array<complexd>*> MultiLevelField(Array<double> *lat, CudaRNG *rng_state, MLArg *arg, bool PrintResultsAtEveryN4=false);

@@ -30,6 +30,8 @@
 #include "gnuplot.h"
 
 
+#include "jack.h"
+
 using namespace std;
 using namespace U1;
 
@@ -138,6 +140,8 @@ int main(){
 	int mininter = 700;
 	vector<ML_Fields*> dataTTO;
 	vector<Array<complexd>*> data;
+	
+	vector<double> *ppdata = 0;
 	GnuplotPipe gp;
 	for(PARAMS::iter = 1; PARAMS::iter <= maxIter; ++PARAMS::iter){
 		// metropolis and overrelaxation algorithm 
@@ -198,8 +202,40 @@ int main(){
 			arg.UpdatesLvl1() = 16;
 			arg.nUpdatesMetropolis() = 1;
 			arg.nUpdatesOvr() = 3;			
-			Array<complexd>* rresults = MultiLevel(lattice, rng, &arg);
-			delete rresults;
+			vector<double> d0 = MultiLevel<true>(lattice, rng, &arg, false);
+			
+			static bool init = false;
+			if(!init){
+				ppdata = new vector<double>[arg.Rmax()];
+				init = true;
+			}
+			for(int i = 0; i < arg.Rmax(); i++)
+				ppdata[i].push_back(d0[i]);
+			
+			auto f = [](double x) { return x; };
+			
+							
+			gp.sendLine("reset;");
+			gp.sendLine("set terminal x11 size 800,600 enhanced font 'Verdana,12' persist");
+			gp.sendLine("$data << EOD");	
+			for(int i = 0; i < arg.Rmax(); i++){
+				double2 res = jackknife(ppdata[i], potential);
+				cout << i << '\t' << res.x << '\t' << res.y << endl;
+				gp.sendLine(ToString(i) + '\t' + ToString(res.x) + '\t' + ToString(res.y));
+			}
+			gp.sendLine("EOD");
+			gp.sendLine("unset label");
+			gp.sendLine("set grid");
+			gp.sendLine("set mxtics 5");
+			gp.sendLine("set mytics 5");
+			gp.sendLine("set style line 1 linecolor rgb 'red' pointtype 5 pointsize 1");
+			gp.sendLine("set style line 2 linecolor rgb '#0010ad' pointtype 5 pointsize 1");
+			gp.sendLine("set style line 3 linecolor rgb 'green' pointtype 5 pointsize 1");
+			gp.sendLine("set xlabel \"r\"");
+			gp.sendLine("set ylabel \"V(r)\"");
+			gp.sendLine("set key left bottom");
+			gp.sendLine("plot \"$data\" using 1:2:3 ls 2 title \"V(r)\"");
+			gp.sendEndOfData();
 			p0.stop();
 			std::cout << "p1: " << p0.getElapsedTime() << " s" << endl;
 		}
@@ -476,7 +512,7 @@ int main(){
 		Array<complexd>* val = data.at(i);
 		delete val;
 	}
-	
+	if(ppdata) delete[] ppdata;
 	delete lattice;
 	delete rng;
 	delete[] plaqv;

@@ -27,6 +27,11 @@
 #include "multilevel.h"
 #include "lattice_functions.h"
 
+
+
+
+#include "jack.h"
+
 using namespace std;
 
 namespace U1{
@@ -504,6 +509,161 @@ public:
 
 
 
+vector<double> *data = 0;
+
+template<bool multihit>
+vector<double> MultiLevel(Array<double> *lat, CudaRNG *rng_state, MLArg *arg, bool PrintResultsAtEveryN4){
+	Timer a0; a0.start();
+	
+	arg->check();	
+	arg->print();
+	
+	
+	Array<double>* dev_lat = new Array<double>(Device);
+	dev_lat->Copy(lat);
+
+	int nl2 = Grid(TDir())/arg->nLinksLvl0();
+	int sl2 = nl2*(Dirs()-1)*arg->Rmax()*SpatialVolume();
+	Array<complexd> *l2 = new Array<complexd>(Device, sl2);
+	int nl4 = Grid(TDir())/arg->nLinksLvl1();
+	size_t sl4 = nl4*(Dirs()-1)*arg->Rmax()*SpatialVolume();
+	Array<complexd> *l4 = new Array<complexd>(Device, sl4);
+	
+	
+	// metropolis and overrelaxation algorithm
+	Metropolis_ML mtp(dev_lat, rng_state);
+	OverRelaxation_ML ovr(dev_lat);
+		
+	Polyakov_Volume<multihit> mhitVol(dev_lat);
+	Array<complexd>* dev_mhit;
+	
+	double l2norm = 1./double(arg->StepsLvl0());
+	L2AvgL4ML l2avgl4(l2, l4, sl4, arg->Rmax(), l2norm, arg->nLinksLvl0(), arg->nLinksLvl1());
+	double l4norm = 1./double(arg->StepsLvl1());
+	L4AvgPP<false> l4avgpp(l4, arg->Rmax(), l4norm, arg->nLinksLvl1());
+
+	l4->Clear();
+	for(int i = 0; i < arg->StepsLvl1(); ++i){
+		cout << "Iter of l4: " << i << endl;
+		//Update the lattice k4 times freezing spacial links in layers with t multiple of 4
+		for(int j = 0; j < arg->UpdatesLvl1(); ++j){
+			mtp.Run(arg->nUpdatesMetropolis(), arg->nLinksLvl1());
+			ovr.Run(arg->nUpdatesOvr(), arg->nLinksLvl1());
+		}
+		l2->Clear();
+		for(int k = 0; k < arg->StepsLvl0(); ++k){		
+			//Update the lattice k2 times freezing spacial links in layers with t multiple of 2
+			for(int l = 0; l < arg->UpdatesLvl0(); ++l){
+				mtp.Run(arg->nUpdatesMetropolis(), arg->nLinksLvl0());
+				ovr.Run(arg->nUpdatesOvr(), arg->nLinksLvl0());
+			}
+			//Extract temporal links and apply MultiHit
+			dev_mhit = mhitVol.Run();			
+			//Calculate tensor T2
+			L2ML l2ml(dev_mhit, l2, sl2, arg->Rmax(), arg->nLinksLvl0());
+			//L2ML1<multihit> l2ml(dev_lat, l2, sl2, arg->Rmax(), arg->nLinksLvl0());  // <--- SLOW
+			l2ml.Run();
+		}
+		//Average tensor T2 and Calculate tensor T4
+		l2avgl4.Run();	
+		
+		
+		if(PrintResultsAtEveryN4){
+			if(!data){
+				data = new vector<double>[arg->Rmax()];
+			}
+			double l4norm1 = 1./double(i+1);
+			L4AvgPP<false> l4avgpp1(l4, arg->Rmax(), l4norm1, arg->nLinksLvl1());
+			Array<complexd>* res = l4avgpp1.Run();
+			cout << res << endl;
+			for(int i = 0; i < res->Size(); i++)
+				data[i].push_back(res->at(i).real());
+			
+			auto f = [](double x) { return x; };
+			for(int i = 0; i < res->Size(); i++){
+				double2 res = jackknife(data[i], potential);
+				cout << i << '\t' << res.x << '\t' << res.y << endl;
+			}
+			delete res;
+		}
+	}
+	if(PrintResultsAtEveryN4) if(data) { delete[] data; data = 0; }
+	delete dev_lat;
+	delete dev_mhit;
+	delete l2;
+	//Average tensor T4 and Calculate P(0)*conj(P(r))
+	Array<complexd> *pp = l4avgpp.Run();
+	delete l4;
+
+	std::ofstream fileout;
+	std::string filename = "Pot_mlevel_" + GetLatticeNameI();
+	filename += "_" + ToString(arg->nLinksLvl1()) + "_" + ToString(arg->StepsLvl1());
+	filename += "_" + ToString(arg->UpdatesLvl1()) + "_" + ToString(arg->nLinksLvl0());
+	filename += "_" + ToString(arg->StepsLvl0()) + "_" + ToString(arg->UpdatesLvl0());
+	filename += "_" + ToString(arg->nUpdatesMetropolis()) + "_" + ToString(arg->nUpdatesOvr());
+	filename += "_" + ToString(arg->Rmax());
+	filename += "_" + ToString(arg->MHit());
+	filename += ".dat";
+	fileout.open (filename.c_str());
+	if (!fileout.is_open()) {
+		std::cout << "Error opening file: " << filename << std::endl;
+		exit(1);
+	}
+	cout << "Saving data to " << filename << endl;
+	fileout << std::scientific;
+	fileout.precision(14);
+	cout << std::scientific;
+	cout << std::setprecision(14);
+	
+	vector<double> data;
+	for(int r = 0; r < arg->Rmax(); ++r){
+		data.push_back(pp->at(r).real());
+		cout << r << '\t' << pp->at(r) << endl;
+		fileout << r << '\t' << pp->at(r) << endl;
+	}
+	delete pp;
+	cout << setprecision(-1);
+	cout << std::defaultfloat;
+	fileout.close();
+	a0.stop();
+	std::cout << "time " << a0.getElapsedTime() << " s" << endl;
+	
+	return data;
+}
+
+
+template
+vector<double> MultiLevel<true>(Array<double> *lat, CudaRNG *rng_state, MLArg *arg, bool PrintResultsAtEveryN4);
+template 
+vector<double> MultiLevel<false>(Array<double> *lat, CudaRNG *rng_state, MLArg *arg, bool PrintResultsAtEveryN4);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -565,10 +725,22 @@ static Array<complexd>* MultiLevel0(Array<double> *lat, CudaRNG *rng_state, MLAr
 		
 		
 		if(PrintResultsAtEveryN4){
+			static bool init = false;
+			if(!init){
+				data = new vector<double>[arg->Rmax()];
+				init = true;
+			}
 			double l4norm1 = 1./double(i+1);
 			L4AvgPP<false> l4avgpp1(l4, arg->Rmax(), l4norm1, arg->nLinksLvl1());
 			Array<complexd>* res = l4avgpp1.Run();
 			cout << res << endl;
+			for(int i = 0; i < res->Size(); i++)
+				data[i].push_back(res->at(i).real());
+			
+			for(int i = 0; i < res->Size(); i++){
+				double2 res = jackknife(data[i], potential);
+				cout << i << '\t' << res.x << '\t' << res.y << endl;
+			}
 			delete res;
 		}
 	}

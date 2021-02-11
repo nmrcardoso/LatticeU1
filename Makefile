@@ -40,7 +40,7 @@ HASH = \"cpu_arch=$(strip $(OS_ARCH)),gpu_arch=$(strip $(GPU_ARCH)),cuda_version
 
 all : directories $(PROJECTNAME)
 
-OBJS := timer.o alloc.o parameters.o random.o update.o plaquette.o polyakov.o tune.o cuda_error_check.o actime.o plaquette_comps.o chromofield.o convertOrder.o smearing.o wilsonloop.o Fmunu.o multilevel.o   multilevel_TTO.o fields.o link_test.o ../u1.o
+OBJS := timer.o alloc.o parameters.o random.o update.o plaquette.o polyakov.o tune.o cuda_error_check.o actime.o plaquette_comps.o chromofield.o convertOrder.o smearing.o wilsonloop.o Fmunu.o multilevel.o   multilevel_TTO.o fields.o link_test.o jack.o ../u1.o
 
 INCS:= include
 U1OBJS  := $(patsubst %.o,$(OBJDIR)/%.o,$(OBJS))

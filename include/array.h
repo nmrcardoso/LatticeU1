@@ -135,10 +135,12 @@ class Array : public Object{
 	}
 	
 	friend M_HOST std::ostream& operator<<( std::ostream& out, Array<Real> *M ) {
-		//out << std::scientific;
-		//out << std::setprecision(14);
+		out << std::scientific;
+		out << std::setprecision(14);	
 		for(int i = 0; i < M->size; i++)
-			out << i << '\t' << M->ptr[i] << std::endl;;
+			out << i << '\t' << M->ptr[i] << std::endl;
+		out << std::setprecision(-1);
+		out << std::defaultfloat;
 		return out;
 	}
 	

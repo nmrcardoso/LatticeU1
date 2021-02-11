@@ -507,8 +507,8 @@ public:
 
 
 
-
-Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, MLArg *arg, bool PrintResultsAtEveryN4){
+template<bool multihit>
+static Array<complexd>* MultiLevel0(Array<double> *lat, CudaRNG *rng_state, MLArg *arg, bool PrintResultsAtEveryN4){
 	Timer a0; a0.start();
 	
 	arg->check();	
@@ -530,7 +530,6 @@ Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, MLArg *arg, 
 	Metropolis_ML mtp(dev_lat, rng_state);
 	OverRelaxation_ML ovr(dev_lat);
 		
-	const bool multihit = true;
 	Polyakov_Volume<multihit> mhitVol(dev_lat);
 	Array<complexd>* dev_mhit;
 	
@@ -587,6 +586,7 @@ Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, MLArg *arg, 
 	filename += "_" + ToString(arg->StepsLvl0()) + "_" + ToString(arg->UpdatesLvl0());
 	filename += "_" + ToString(arg->nUpdatesMetropolis()) + "_" + ToString(arg->nUpdatesOvr());
 	filename += "_" + ToString(arg->Rmax());
+	filename += "_" + ToString(arg->MHit());
 	filename += ".dat";
 	fileout.open (filename.c_str());
 	if (!fileout.is_open()) {
@@ -603,12 +603,21 @@ Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, MLArg *arg, 
 		cout << r << '\t' << pp->at(r) << endl;
 		fileout << r << '\t' << pp->at(r) << endl;
 	}
-	
+	cout << setprecision(-1);
+	cout << std::defaultfloat;
 	fileout.close();
 	a0.stop();
 	std::cout << "time " << a0.getElapsedTime() << " s" << endl;
 	
 	return pp;
+}
+
+
+Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, MLArg *arg, bool PrintResultsAtEveryN4){
+	if(arg->MHit())
+		return MultiLevel0<true>(lat, rng_state, arg, PrintResultsAtEveryN4);
+	else
+		return MultiLevel0<false>(lat, rng_state, arg, PrintResultsAtEveryN4);
 }
 
 
@@ -629,11 +638,8 @@ Array<complexd>* MultiLevel(Array<double> *lat, CudaRNG *rng_state, MLArg *arg, 
 
 
 
-
-
-
-
-std::tuple<Array<complexd>*, Array<complexd>*> MultiLevelField(Array<double> *lat, CudaRNG *rng_state, MLArg *arg, bool PrintResultsAtEveryN4){
+template<bool multihit>
+static std::tuple<Array<complexd>*, Array<complexd>*> MultiLevelField0(Array<double> *lat, CudaRNG *rng_state, MLArg *arg, bool PrintResultsAtEveryN4){
 	Timer a0; a0.start();
 	
 	arg->check();	
@@ -655,7 +661,6 @@ std::tuple<Array<complexd>*, Array<complexd>*> MultiLevelField(Array<double> *la
 	Metropolis_ML mtp(dev_lat, rng_state);
 	OverRelaxation_ML ovr(dev_lat);
 		
-	const bool multihit = true;
 	Polyakov_Volume<multihit> mhitVol(dev_lat);
 	Array<complexd>* dev_mhit;
 	
@@ -714,6 +719,7 @@ std::tuple<Array<complexd>*, Array<complexd>*> MultiLevelField(Array<double> *la
 	filename += "_" + ToString(arg->StepsLvl0()) + "_" + ToString(arg->UpdatesLvl0());
 	filename += "_" + ToString(arg->nUpdatesMetropolis()) + "_" + ToString(arg->nUpdatesOvr());
 	filename += "_" + ToString(arg->Rmax());
+	filename += "_" + ToString(arg->MHit());
 	filename += ".dat";
 	fileout.open (filename.c_str());
 	if (!fileout.is_open()) {
@@ -730,6 +736,8 @@ std::tuple<Array<complexd>*, Array<complexd>*> MultiLevelField(Array<double> *la
 		cout << r << '\t' << pp->at(r) << endl;
 		fileout << r << '\t' << pp->at(r) << endl;
 	}
+	cout << setprecision(-1);
+	cout << std::defaultfloat;
 	
 	fileout.close();
 	a0.stop();
@@ -738,6 +746,13 @@ std::tuple<Array<complexd>*, Array<complexd>*> MultiLevelField(Array<double> *la
 	return data;
 }
 
+
+std::tuple<Array<complexd>*, Array<complexd>*> MultiLevelField(Array<double> *lat, CudaRNG *rng_state, MLArg *arg, bool PrintResultsAtEveryN4){
+	if(arg->MHit())
+		return MultiLevelField0<true>(lat, rng_state, arg, PrintResultsAtEveryN4);
+	else
+		return MultiLevelField0<false>(lat, rng_state, arg, PrintResultsAtEveryN4);
+}
 
 
 

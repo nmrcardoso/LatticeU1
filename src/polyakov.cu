@@ -406,11 +406,11 @@ Array<complexd>* Poly2(Array<Real> *lat, uint Rmax, bool multihit){
 		exit(1);
 	}
 	fileout << std::scientific;
-	fileout.precision(12);
+	fileout.precision(14);
 		
 	for(int r = 0; r < Rmax; ++r){
-		cout << r << '\t' << poly2->at(r).real() << '\t' << poly2->at(r).imag() << endl;
-		fileout << r << '\t' << poly2->at(r).real() << '\t' << poly2->at(r).imag() << endl;
+		cout << r << '\t' << poly2->at(r) << endl;
+		fileout << r << '\t' << poly2->at(r) << endl;
 	}
 	
 	fileout.close();	
@@ -449,11 +449,11 @@ void Poly2(Array<Real> *lat, Array<complexd> **poly2, Array<complexd> **ppspace,
 		exit(1);
 	}
 	fileout << std::scientific;
-	fileout.precision(12);
+	fileout.precision(14);
 		
 	for(int r = 0; r < Rmax; ++r){
-		cout << r << '\t' << (*poly2)->at(r).real() << '\t' << (*poly2)->at(r).imag() << endl;
-		fileout << r << '\t' << (*poly2)->at(r).real() << '\t' << (*poly2)->at(r).imag() << endl;
+		cout << r << '\t' << (*poly2)->at(r) << endl;
+		fileout << r << '\t' << (*poly2)->at(r) << endl;
 	}
 	
 	fileout.close();	

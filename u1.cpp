@@ -165,12 +165,14 @@ int main(){
 		}
 		
 		
-		if(1)if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
+		if(0)if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
 		
 			Calc_PPFields(lattice, rng, true, true);
 			//Calc_WLFields(lattice, rng);
-			if(0){break;
-			Timer p0,p1;
+			
+		}
+		if(1)if( PARAMS::iter >= 1000 && (PARAMS::iter%printiter)==0){
+			Timer p0;
 			cout << "########### P(0)*conj(P(r)) #####################" << endl;
 			p0.start();
 			Array<complexd>* res = Poly2(lattice, Grid(0)/2+1, false);
@@ -178,19 +180,16 @@ int main(){
 			p0.stop();
 			std::cout << "p0: " << p0.getElapsedTime() << " s" << endl;	
 			cout << "########### P(0)*conj(P(r)) Using MultiHit #####################" << endl;
-			p1.start();
+			p0.start();
 			res = Poly2(lattice, Grid(0)/2+1, true);
 			delete res;
-			p1.stop();
-			std::cout << "p1: " << p1.getElapsedTime() << " s" << endl;
-			cout << "########### P(0)*conj(P(r)) Using MultiLevel #####################" << endl;		
-			int Rmax = Grid(0)/2+1;
-			CudaRNG *rng11 = new CudaRNG(seed, HalfVolume());
-			
+			p0.stop();
+			std::cout << "p1: " << p0.getElapsedTime() << " s" << endl;
+			cout << "########### P(0)*conj(P(r)) Using MultiLevel #####################" << endl;	
+			p0.start();	
 			MLArg arg;
-			arg.Rmax() = Rmax;
-			arg.MHit() = true;
-								
+			arg.Rmax() = Grid(0)/2+1;
+			arg.MHit() = true;								
 			arg.nLinksLvl0() = 2;
 			arg.StepsLvl0() = 50;
 			arg.UpdatesLvl0() = 5;
@@ -198,13 +197,11 @@ int main(){
 			arg.StepsLvl1() = 10;
 			arg.UpdatesLvl1() = 16;
 			arg.nUpdatesMetropolis() = 1;
-			arg.nUpdatesOvr() = 3;
-			
+			arg.nUpdatesOvr() = 3;			
 			Array<complexd>* rresults = MultiLevel(lattice, rng, &arg);
-			
-			
-			delete rng11; delete rresults;
-			}
+			delete rresults;
+			p0.stop();
+			std::cout << "p1: " << p0.getElapsedTime() << " s" << endl;
 		}
 		
 			

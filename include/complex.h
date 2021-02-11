@@ -365,9 +365,12 @@ class _complex {
 
     
   friend M_HOST std::ostream& operator<<( std::ostream& out, _complex<Real> M ) {
-    //cout << std::scientific;
-    //out << std::setprecision(14);
+  	//out << std::setprecision(14) << M.real() << std::showpos << M.imag() << "i" << std::noshowpos;
+    out <<std::scientific;
+    out << std::setprecision(14);
     out << M.real() << '\t' << M.imag();
+	out << std::setprecision(-1);
+	out << std::defaultfloat;
     return out;
   }
 

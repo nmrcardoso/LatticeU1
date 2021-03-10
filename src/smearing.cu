@@ -192,12 +192,12 @@ template Array<complexd>* ApplyMultiHit<complexd>(Array<complexd>* lat, int opti
 InlineHostDevice complexd smear_ape(complexd *lat, const int id, const int parity, const int mu, double w){
 	complexd staple = Staple(lat, id, parity, mu);
 	int pos = id + parity * HalfVolume() + mu * Volume();
-	return exp_ir((GetValue(lat[pos]) + conj(staple) * w).phase()); //<----- NEED TO CHECK THIS
+	return exp_ir((GetValue(lat[pos]) * w + conj(staple) *(1.0-w)*0.5).phase()); //<----- NEED TO CHECK THIS
 }
 InlineHostDevice double smear_ape(double *lat, const int id, const int parity, const int mu, double w){
 	complexd staple = Staple(lat, id, parity, mu);
 	int pos = id + parity * HalfVolume() + mu * Volume();
-	return (GetValue(lat[pos]) + conj(staple) * w).phase(); //<----- NEED TO CHECK THIS
+	return (GetValue(lat[pos]) * w + conj(staple) *(1.0-w)*0.5).phase(); //<----- NEED TO CHECK THIS
 }
 
 

@@ -214,16 +214,16 @@ __global__ void kernel_smearing_APE(Real *lat, Real *out, double w){
 		parity = 1;	
 		id -= HalfVolume();
 	}	
-	// Apply multihit only in space links
+	// Apply APE only in space links
 	if(option == 0){
 		for(int mu = 0; mu < Dirs()-1; mu++)
 			out[id + parity * HalfVolume() + mu * Volume()] = smear_ape(lat, id, parity, mu, w);
 	}
-	// Apply multihit only in time links
+	// Apply APE only in time links
 	if(option == 1){
 		out[id + parity * HalfVolume() + TDir() * Volume()] = smear_ape(lat, id, parity, TDir(), w);
 	}
-	// Apply multihit all links
+	// Apply APE all links
 	if(option == 2) {
 		for(int mu = 0; mu < Dirs(); mu++)
 			out[id + parity * HalfVolume() + mu * Volume()] = smear_ape(lat, id, parity, mu, w);
@@ -309,9 +309,9 @@ public:
 
 
 
-//option 0: Apply multihit only in space links
-//option 1: Apply multihit only in time links
-//option 2: Apply multihit all links
+//option 0: Apply APE only in space links
+//option 1: Apply APE only in time links
+//option 2: Apply APE all links
 template<class Real>
 Array<Real>* ApplyAPE(Array<Real>* lat, double w, int n, int option){
 	Array<Real>* out = new Array<Real>(Device, lat->Size());

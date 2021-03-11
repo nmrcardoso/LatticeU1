@@ -16,9 +16,9 @@ template<class Real>
 Array<complexd>* ApplyMultiHit(Array<Real>* lat, int option);
 
 
-//option 0: Apply multihit only in space links
-//option 1: Apply multihit only in time links
-//option 2: Apply multihit all links
+//option 0: Apply APE only in space links
+//option 1: Apply APE only in time links
+//option 2: Apply APE all links
 template<class Real>
 Array<Real>* ApplyAPE(Array<Real>* lat, double w, int n, int option);
 

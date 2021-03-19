@@ -432,4 +432,200 @@ template void WilsonLoop(Array<complexd>* lat, Array<complexd>** wl, Array<compl
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+template< class Real>
+__global__ void kernel_wilsonloopPreSPWL_SS(Real *lat, complexd *wlinesp, complexd *wloop, int Rmax, int Tmax){
+    size_t id = threadIdx.x + blockDim.x * blockIdx.x;
+	for(int dir = 0; dir < Dirs()-1; dir++)
+	for(int dir1 = 0; dir1 < Dirs()-1; dir1++){
+		if(dir == dir1) continue;
+		for(int r = 0; r < Rmax; r++){
+			complexd left = 1.0;
+			complexd right = 1.0;
+			complexd top = 1.0;
+			complexd bottom = 1.0;
+			
+			if(id < Volume()) bottom = wlinesp[id + Volume() * dir + Volume() * (Dirs()-1) * r];
+			
+			int idl = id;
+			int idr = indexNO_neg(id, dir, r);
+		
+			//Começa aqui a confusão
+			for( int t = 0; t < Tmax; ++t ) {
+
+				complexd top = 1.0;
+				int idt = indexNO_neg(id, dir1, t);			
+				if(id < Volume()){ 
+					top = wlinesp[idt + Volume() * dir + Volume() * (Dirs()-1) * r];
+					left = wlinesp[idl + Volume() * dir1 + Volume() * (Dirs()-1) * t];
+					right = wlinesp[idr + Volume() * dir1 + Volume() * (Dirs()-1) * t];
+				}
+		
+				complexd wl = 0.0;
+				if(id < Volume()){
+					wl = bottom * right * conj(top) * conj(left);
+				}
+				
+				reduce_block_1d<complexd>(wloop + t + Tmax * r, wl);
+	  		
+	  			/*
+				//actualiza linhas temporais
+				if(id < Volume()){
+					left *= GetValue(lat[idl + dir1 * Volume()]);
+					right *= GetValue(lat[idr + dir1 * Volume()]);
+				}
+				idl = indexNO_neg(idl, dir1, 1);
+				idr = indexNO_neg(idr, dir1, 1);
+				*/
+			}
+		}  
+	} 
+}
+    
+   
+
+template< class Real>
+class wilsonloopWPreWL_SS: Tunable{
+private:
+	Array<Real>* lat;
+	Array<complexd>* wlinesp;
+	Array<complexd>* wloop;
+	Array<complexd>* wloop_dev;
+	int R, T;
+	int size;
+	double timesec;
+#ifdef TIMMINGS
+    Timer time;
+#endif
+
+   unsigned int sharedBytesPerThread() const { return sizeof(complexd); }
+   unsigned int sharedBytesPerBlock(const TuneParam &param) const { return 0; }
+   bool tuneSharedBytes() const { return false; } // Don't tune shared memory
+   bool tuneGridDim() const { return false; } // Don't tune the grid dimensions.
+   unsigned int minThreads() const { return size; }
+   void apply(const cudaStream_t &stream){
+	TuneParam tp = tuneLaunch(*this, getTuning(), getVerbosity());
+	wloop_dev->Clear();
+	kernel_wilsonloopPreSPWL_SS<Real><<<tp.grid, tp.block, tp.shared_bytes, stream>>>(lat->getPtr(), wlinesp->getPtr(), wloop_dev->getPtr(), R, T);
+}
+public:
+   wilsonloopWPreWL_SS(Array<Real>* lat, Array<complexd>* wlinesp, int R, int T) : lat(lat), wlinesp(wlinesp), R(R), T(T) {
+	size = Volume();
+	wloop = new Array<complexd>(Host, R*T);
+	wloop_dev = new Array<complexd>(Device, R*T);
+	timesec = 0.0;  
+}
+   ~wilsonloopWPreWL_SS(){ delete wloop_dev; };
+   Array<complexd>* Run(const cudaStream_t &stream){
+#ifdef TIMMINGS
+    time.start();
+#endif
+	apply(stream);
+	wloop->Copy(wloop_dev);
+	for(int i = 0; i < wloop->Size(); i++) wloop->at(i) /= double(Volume()*(Dirs()-1)*2.0);
+    cudaDevSync();
+    cudaCheckError("Kernel execution failed");
+#ifdef TIMMINGS
+	cudaDevSync( );
+    time.stop();
+    timesec = time.getElapsedTimeInSec();
+#endif
+	return wloop;
+}
+   Array<complexd>* Run(){ return Run(0);}
+   double flops(){	return ((double)flop() * 1.0e-9) / timesec;}
+   double bandwidth(){	return (double)bytes() / (timesec * (double)(1 << 30));}
+   long long flop() const { return 0;}
+   long long bytes() const{ return 0;}
+   double get_time(){	return timesec;}
+   void stat(){	cout << "wilsonloopWPreWL:  " <<  get_time() << " s\t"  << bandwidth() << " GB/s\t" << flops() << " GFlops"  << endl;}
+  TuneKey tuneKey() const {
+    std::stringstream vol, aux;
+    vol << PARAMS::Grid[0] << "x";
+    vol << PARAMS::Grid[1] << "x";
+    vol << PARAMS::Grid[2] << "x";
+    vol << PARAMS::Grid[3];
+    aux << "threads=" << size;
+    return TuneKey(vol.str().c_str(), typeid(*this).name(), aux.str().c_str());
+  }
+  std::string paramString(const TuneParam &param) const {
+    std::stringstream ps;
+    ps << "block=(" << param.block.x << "," << param.block.y << "," << param.block.z << ")";
+    ps << "shared=" << param.shared_bytes;
+    return ps.str();
+  }
+  void preTune() { }
+  void postTune() { }
+
+};
+
+
+
+
+
+
+
+
+
+template<class Real>
+Array<complexd>* WilsonLoopSS(Array<Real>* lat, int R, int T){
+	Array<Real>* tmp = LatticeConvert(lat, true);
+	WilsonSPLines<Real> wlines(tmp, R);
+	Array<complexd>* wlinesp = wlines.Run();
+	wilsonloopWPreWL_SS<Real> wloop(tmp, wlinesp, R, T);
+	Array<complexd>* res = wloop.Run();
+	delete tmp;
+	return res;
+}
+
+template Array<complexd>* WilsonLoopSS(Array<double>* lat, int R, int T);
+template Array<complexd>* WilsonLoopSS(Array<complexd>* lat, int R, int T);
+
+
+
+
+
+
+
+
+
+
+
+
 }
